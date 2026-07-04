@@ -1,0 +1,123 @@
+import 'package:flutter/widgets.dart';
+
+class I18n {
+  I18n._();
+
+  static final ValueNotifier<Locale> locale =
+      ValueNotifier(const Locale('zh', 'CN'));
+
+  static const Map<String, Map<String, String>> _strings = {
+    'zh_CN': {
+      'app.title': 'AUWKI Agent',
+      'sidebar.user': '用户名',
+      'sidebar.menu': '菜单',
+      'sidebar.new_chat': '新建对话',
+      'sidebar.folder': '文件夹',
+      'sidebar.section.pinned': '置顶',
+      'sidebar.section.7d': '7 天内',
+      'sidebar.section.30d': '30 天内',
+      'sidebar.menu.rename': '重命名',
+      'sidebar.menu.pin': '置顶',
+      'sidebar.menu.unread': '标记为未读',
+      'sidebar.menu.delete': '删除',
+      'menu.profile': '个人信息',
+      'menu.settings': '设置',
+      'profile.title': '个人信息',
+      'settings.title': '设置',
+      'home.greeting.1': '开始干活吧!',
+      'home.greeting.2': '今日有何贵干?',
+      'home.greeting.3': '今天想干什么?',
+      'mode.work': 'WORK',
+      'mode.plan': 'PLAN',
+      'thinking.label': '思考模式',
+      'thinking.on': 'ON',
+      'thinking.off': 'OFF',
+      'thinking.fast': 'Fast',
+      'thinking.thinking': 'Thinking',
+      'thinking.deep': 'Deep thinking',
+      'thinking.max': 'Max thinking',
+      'thinking.flagship': 'Flagship Thinking',
+      'chat.placeholder': '给 DeepSeek 发送消息',
+      'chat.tool.deep': '深度思考',
+      'chat.tool.search': '智能搜索',
+      'chat.attach': '附件',
+      'chat.send': '发送',
+      'chat.empty': '新对话',
+      'chat.you': '你',
+      'chat.assistant': 'AUWKI',
+      'chat.no_key': '[未配置 API Key]',
+      'chat.connecting': '[正在连接…]',
+      'chat.error': '[错误]',
+      'dialog.rename.title': '重命名对话',
+      'dialog.rename.hint': '输入新名称',
+      'dialog.delete.title': '删除对话',
+      'dialog.delete.body': '确定要删除「{name}」吗？此操作不可撤销。',
+      'dialog.cancel': '取消',
+      'dialog.confirm': '确定',
+      'attach.error.binary': '二进制文件不支持：{name}',
+      'attach.error.read': '无法读取文件：{name}',
+      'attach.too_large': '文件过大（限制 5MB）：{name}',
+    },
+    'en_US': {
+      'app.title': 'AUWKI Agent',
+      'sidebar.user': 'Username',
+      'sidebar.menu': 'Menu',
+      'sidebar.new_chat': 'New chat',
+      'sidebar.folder': 'Folder',
+      'sidebar.section.pinned': 'Pinned',
+      'sidebar.section.7d': 'Last 7 days',
+      'sidebar.section.30d': 'Last 30 days',
+      'sidebar.menu.rename': 'Rename',
+      'sidebar.menu.pin': 'Pin',
+      'sidebar.menu.unread': 'Mark unread',
+      'sidebar.menu.delete': 'Delete',
+      'menu.profile': 'Profile',
+      'menu.settings': 'Settings',
+      'profile.title': 'Profile',
+      'settings.title': 'Settings',
+      'home.greeting.1': "Let's get to work!",
+      'home.greeting.2': 'What are we doing today?',
+      'home.greeting.3': 'What do you want to do today?',
+      'mode.work': 'WORK',
+      'mode.plan': 'PLAN',
+      'thinking.label': 'Thinking',
+      'thinking.on': 'ON',
+      'thinking.off': 'OFF',
+      'thinking.fast': 'Fast',
+      'thinking.thinking': 'Thinking',
+      'thinking.deep': 'Deep thinking',
+      'thinking.max': 'Max thinking',
+      'thinking.flagship': 'Flagship Thinking',
+      'chat.placeholder': 'Message DeepSeek',
+      'chat.tool.deep': 'Deep think',
+      'chat.tool.search': 'Web search',
+      'chat.attach': 'Attach',
+      'chat.send': 'Send',
+      'chat.empty': 'New chat',
+      'chat.you': 'You',
+      'chat.assistant': 'AUWKI',
+      'chat.no_key': '[No API key]',
+      'chat.connecting': '[Connecting…]',
+      'chat.error': '[Error]',
+      'dialog.rename.title': 'Rename conversation',
+      'dialog.rename.hint': 'New name',
+      'dialog.delete.title': 'Delete conversation',
+      'dialog.delete.body': 'Delete "{name}"? This cannot be undone.',
+      'dialog.cancel': 'Cancel',
+      'dialog.confirm': 'Confirm',
+      'attach.error.binary': 'Binary files not supported: {name}',
+      'attach.error.read': 'Cannot read file: {name}',
+      'attach.too_large': 'File too large (max 5MB): {name}',
+    },
+  };
+
+  static String t(String key, [Map<String, String>? params]) {
+    final loc = '${locale.value.languageCode}_${locale.value.countryCode}';
+    final map = _strings[loc] ?? _strings['zh_CN']!;
+    var s = map[key] ?? _strings['en_US']![key] ?? key;
+    if (params != null) {
+      params.forEach((k, v) => s = s.replaceAll('{$k}', v));
+    }
+    return s;
+  }
+}
