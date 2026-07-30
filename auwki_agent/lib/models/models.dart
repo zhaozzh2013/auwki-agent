@@ -1,3 +1,5 @@
+import '../i18n/strings.dart';
+
 enum Sender { user, assistant, system, tool }
 
 class Attachment {
@@ -13,14 +15,19 @@ class Attachment {
   final String mimeType;
   final String content;
 
+  factory Attachment.fromJson(Map<String, dynamic> json) => Attachment(
+    name: (json['name'] ?? '').toString(),
+    size: (json['size'] as num?)?.toInt() ?? 0,
+    mimeType: (json['mimeType'] ?? '').toString(),
+    content: (json['content'] ?? '').toString(),
+  );
+
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'size': size,
-        'mimeType': mimeType,
-        'preview': content.length > 200
-            ? '${content.substring(0, 200)}…'
-            : content,
-      };
+    'name': name,
+    'size': size,
+    'mimeType': mimeType,
+    'content': content,
+  };
 }
 
 class Message {
@@ -49,6 +56,38 @@ class Message {
   final bool toolRunning;
 
   final DateTime createdAt;
+
+  factory Message.fromJson(Map<String, dynamic> json) => Message(
+    id: (json['id'] ?? '').toString(),
+    sender: Sender.values.firstWhere(
+      (s) => s.name == json['sender'],
+      orElse: () => Sender.assistant,
+    ),
+    text: (json['text'] ?? '').toString(),
+    attachments: ((json['attachments'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((a) => Attachment.fromJson(Map<String, dynamic>.from(a)))
+        .toList(),
+    toolName: json['toolName']?.toString(),
+    toolArgs: json['toolArgs']?.toString(),
+    toolResult: json['toolResult']?.toString(),
+    toolOk: json['toolOk'] as bool?,
+    toolRunning: json['toolRunning'] as bool? ?? false,
+    createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sender': sender.name,
+    'text': text,
+    'attachments': attachments.map((a) => a.toJson()).toList(),
+    'toolName': toolName,
+    'toolArgs': toolArgs,
+    'toolResult': toolResult,
+    'toolOk': toolOk,
+    'toolRunning': toolRunning,
+    'createdAt': createdAt.toIso8601String(),
+  };
 }
 
 class Folder {
@@ -57,6 +96,18 @@ class Folder {
   final String id;
   String name;
   bool expanded;
+
+  factory Folder.fromJson(Map<String, dynamic> json) => Folder(
+    id: (json['id'] ?? '').toString(),
+    name: (json['name'] ?? '').toString(),
+    expanded: json['expanded'] as bool? ?? true,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'expanded': expanded,
+  };
 }
 
 class Conversation {
@@ -68,8 +119,8 @@ class Conversation {
     this.unread = false,
     List<Message>? messages,
     DateTime? updatedAt,
-  })  : messages = messages ?? [],
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : messages = messages ?? [],
+       updatedAt = updatedAt ?? DateTime.now();
 
   final String id;
   String title;
@@ -79,10 +130,35 @@ class Conversation {
   List<Message> messages;
   DateTime updatedAt;
 
+  factory Conversation.fromJson(Map<String, dynamic> json) => Conversation(
+    id: (json['id'] ?? '').toString(),
+    title: (json['title'] ?? '').toString(),
+    folderId: json['folderId']?.toString(),
+    pinned: json['pinned'] as bool? ?? false,
+    unread: json['unread'] as bool? ?? false,
+    messages: ((json['messages'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => Message.fromJson(Map<String, dynamic>.from(m)))
+        .toList(),
+    updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'folderId': folderId,
+    'pinned': pinned,
+    'unread': unread,
+    'messages': messages.map((m) => m.toJson()).toList(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
   String get preview {
     if (messages.isEmpty) return '';
     final last = messages.last;
     final t = last.text.trim();
-    return t.isEmpty ? '📎 ${last.attachments.length} 个附件' : t;
+    return t.isEmpty
+        ? '📎 ${I18n.t('chat.attachment_count', {'count': '${last.attachments.length}'})}'
+        : t;
   }
 }

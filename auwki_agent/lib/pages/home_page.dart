@@ -6,12 +6,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../app_state.dart';
 import '../i18n/strings.dart';
 import '../models/models.dart';
+import '../services/settings_store.dart';
 import '../state/chat_store.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/thinking_slider.dart';
+import '../widgets/dialogs/settings_dialog.dart';
 import '../work_mode.dart';
 
 class HomePage extends StatefulWidget {
@@ -25,6 +27,7 @@ class _HomePageState extends State<HomePage> {
   WorkMode _mode = WorkMode.work;
   ThinkingLevel _thinking = ThinkingLevel.thinking;
   _ActiveIdListenable? _activeListenable;
+  ChatStore? _store;
 
   String? _greeting;
   String? _greetingForConvId;
@@ -38,18 +41,34 @@ class _HomePageState extends State<HomePage> {
     } else {
       _activeListenable!.attach(store);
     }
+    if (_store != store) {
+      _store?.removeListener(_onStoreChange);
+      _store = store;
+      _store?.addListener(_onStoreChange);
+    }
+  }
+
+  void _onStoreChange() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _activeListenable?.dispose();
+    _store?.removeListener(_onStoreChange);
     super.dispose();
   }
 
-  Color get _accent =>
-      _mode == WorkMode.plan ? AppColors.planAccent : AppColors.primary;
-  Color get _accentSoft =>
-      _mode == WorkMode.plan ? AppColors.planAccentSoft : AppColors.primarySoft;
+  Color get _accent => _thinking == ThinkingLevel.flagship
+      ? AppColors.primary
+      : _mode == WorkMode.plan
+      ? AppColors.planAccent
+      : AppColors.primary;
+  Color get _accentSoft => _thinking == ThinkingLevel.flagship
+      ? AppColors.primarySoft
+      : _mode == WorkMode.plan
+      ? AppColors.planAccentSoft
+      : AppColors.primarySoft;
 
   String _resolveGreeting(String? convId) {
     if (convId == null) {
@@ -78,45 +97,384 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final store = AppState.chatOf(context);
+    final settings = AppState.settingsOf(context);
+    final showInspector = MediaQuery.sizeOf(context).width >= 1180;
+    final isFlagship = _thinking == ThinkingLevel.flagship;
+    AppColors.palette = isFlagship
+        ? (settings.theme == AppTheme.dark
+              ? AppPalette.darkFlagship
+              : AppPalette.lightFlagship)
+        : (settings.theme == AppTheme.dark
+              ? AppPalette.dark
+              : AppPalette.light);
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Sidebar(accent: _accent),
-          Expanded(
-            child: ValueListenableBuilder<String?>(
-              valueListenable: _activeListenable!,
-              builder: (context, activeId, _) {
-                final greeting = _resolveGreeting(activeId);
-                if (activeId == null) {
-                  return _EmptyHome(
-                    accent: _accent,
-                    accentSoft: _accentSoft,
-                    mode: _mode,
-                    thinking: _thinking,
-                    onModeChanged: (m) => setState(() => _mode = m),
-                    onThinkingChanged: (t) =>
-                        setState(() => _thinking = t),
-                    greeting: greeting,
-                  );
-                }
-                final conv = store.conversations.firstWhere(
-                  (c) => c.id == activeId,
-                  orElse: () => store.conversations.first,
-                );
-                return ChatView(
-                  conversation: conv,
-                  mode: _mode,
-                  thinking: _thinking,
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Sidebar(accent: _accent),
+        Expanded(
+          child: ValueListenableBuilder<String?>(
+            valueListenable: _activeListenable!,
+            builder: (context, activeId, _) {
+              final greeting = _resolveGreeting(activeId);
+              if (activeId == null) {
+                return _EmptyHome(
                   accent: _accent,
                   accentSoft: _accentSoft,
+                  mode: _mode,
+                  thinking: _thinking,
                   onModeChanged: (m) => setState(() => _mode = m),
                   onThinkingChanged: (t) => setState(() => _thinking = t),
                   greeting: greeting,
                 );
-              },
+              }
+              Conversation? conv;
+              for (final c in store.conversations) {
+                if (c.id == activeId) {
+                  conv = c;
+                  break;
+                }
+              }
+              if (conv == null) {
+                return _EmptyHome(
+                  accent: _accent,
+                  accentSoft: _accentSoft,
+                  mode: _mode,
+                  thinking: _thinking,
+                  onModeChanged: (m) => setState(() => _mode = m),
+                  onThinkingChanged: (t) => setState(() => _thinking = t),
+                  greeting: greeting,
+                );
+              }
+              return ChatView(
+                conversation: conv,
+                mode: _mode,
+                thinking: _thinking,
+                accent: _accent,
+                accentSoft: _accentSoft,
+                onModeChanged: (m) => setState(() => _mode = m),
+                onThinkingChanged: (t) => setState(() => _thinking = t),
+                greeting: greeting,
+              );
+            },
+          ),
+        ),
+        if (showInspector)
+          ValueListenableBuilder<String?>(
+            valueListenable: _activeListenable!,
+            builder: (context, activeId, _) {
+              Conversation? conv;
+              if (activeId != null) {
+                for (final c in store.conversations) {
+                  if (c.id == activeId) {
+                    conv = c;
+                    break;
+                  }
+                }
+              }
+              return _InspectorPanel(
+                conversation: conv,
+                mode: _mode,
+                thinking: _thinking,
+                accent: _accent,
+              );
+            },
+          ),
+      ],
+    );
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: _FlagshipShell(enabled: isFlagship, child: content),
+    );
+  }
+}
+
+class _FlagshipShell extends StatefulWidget {
+  const _FlagshipShell({required this.enabled, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  State<_FlagshipShell> createState() => _FlagshipShellState();
+}
+
+class _FlagshipShellState extends State<_FlagshipShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    );
+    if (widget.enabled) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FlagshipShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.enabled && _controller.isAnimating) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final glow = widget.enabled ? 0.10 + _controller.value * 0.08 : 0.0;
+        return Stack(
+          children: [
+            Positioned.fill(child: child!),
+            if (widget.enabled)
+              IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0.85, -0.85),
+                      radius: 0.75,
+                      colors: [
+                        AppColors.primary.withValues(alpha: glow),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+          ],
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class _InspectorPanel extends StatelessWidget {
+  const _InspectorPanel({
+    required this.conversation,
+    required this.mode,
+    required this.thinking,
+    required this.accent,
+  });
+
+  final Conversation? conversation;
+  final WorkMode mode;
+  final ThinkingLevel thinking;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final conv = conversation;
+    final messages = conv?.messages ?? const <Message>[];
+    final toolMessages = messages
+        .where((m) => m.sender == Sender.tool)
+        .toList();
+    final runningTools = toolMessages.where((m) => m.toolRunning).toList();
+    final agents = toolMessages
+        .where((m) => m.toolName?.startsWith('agent.') == true)
+        .toList();
+    final blocked = toolMessages.where((m) {
+      final text = '${m.text}\n${m.toolResult ?? ''}';
+      return text.contains('[已拦截]') || text.contains('[Blocked]');
+    }).length;
+
+    return Container(
+      width: 286,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(left: BorderSide(color: AppColors.border)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.dashboard_customize_outlined,
+                    size: 18,
+                    color: accent,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    I18n.t('inspector.title'),
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _InspectorCard(
+                title: I18n.t('inspector.session'),
+                children: [
+                  _InspectorRow(
+                    I18n.t('inspector.mode'),
+                    mode.name.toUpperCase(),
+                  ),
+                  _InspectorRow(I18n.t('inspector.thinking'), thinking.label),
+                  _InspectorRow(
+                    I18n.t('inspector.messages'),
+                    '${messages.length}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _InspectorCard(
+                title: I18n.t('inspector.workflow'),
+                children: [
+                  _InspectorRow(
+                    I18n.t('inspector.running'),
+                    '${runningTools.length}',
+                  ),
+                  _InspectorRow(I18n.t('inspector.agents'), '${agents.length}'),
+                  _InspectorRow(I18n.t('inspector.blocked'), '$blocked'),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: _InspectorCard(
+                  title: I18n.t('inspector.recent_tools'),
+                  children: [
+                    if (toolMessages.isEmpty)
+                      Text(
+                        I18n.t('inspector.empty'),
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                        ),
+                      )
+                    else
+                      for (final m in toolMessages.reversed.take(8))
+                        _ToolTraceLine(message: m, accent: accent),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InspectorCard extends StatelessWidget {
+  const _InspectorCard({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _InspectorRow extends StatelessWidget {
+  const _InspectorRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolTraceLine extends StatelessWidget {
+  const _ToolTraceLine({required this.message, required this.accent});
+
+  final Message message;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = message.toolOk;
+    final color = message.toolRunning
+        ? accent
+        : ok == false
+        ? Colors.redAccent
+        : const Color(0xFF66BB6A);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            margin: const EdgeInsets.only(top: 5),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message.toolName ?? I18n.t('tool.generic'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
         ],
@@ -150,12 +508,14 @@ class _EmptyHome extends StatelessWidget {
       color: AppColors.bg,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
               const Spacer(flex: 1),
               _HeroTitle(text: greeting, accent: accent),
               const SizedBox(height: 24),
+              _OnboardingCard(accent: accent),
+              const SizedBox(height: 14),
               ControlsCard(
                 mode: mode,
                 thinking: thinking,
@@ -168,6 +528,116 @@ class _EmptyHome extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _OnboardingCard extends StatelessWidget {
+  const _OnboardingCard({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 760,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.waving_hand_outlined, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                I18n.t('home.onboarding.title'),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            I18n.t('home.onboarding.body'),
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _OnboardingStep(text: I18n.t('home.onboarding.step1')),
+          _OnboardingStep(text: I18n.t('home.onboarding.step2')),
+          _OnboardingStep(text: I18n.t('home.onboarding.step3')),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: () => showSettingsDialog(context),
+              icon: const Icon(Icons.settings_outlined, size: 16),
+              label: Text(I18n.t('home.onboarding.settings')),
+              style: FilledButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OnboardingStep extends StatelessWidget {
+  const _OnboardingStep({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: AppColors.textTertiary,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -201,6 +671,13 @@ class ChatView extends StatefulWidget {
 
 class _ChatViewState extends State<ChatView> {
   final ScrollController _scroll = ScrollController();
+  final Set<String> _autoSwitchedFor = <String>{};
+  bool _hasChangeModelMarker(String text) {
+    return RegExp(
+      r'change_model\s*\(\s*work\s*\)',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
 
   @override
   void didUpdateWidget(covariant ChatView old) {
@@ -208,6 +685,7 @@ class _ChatViewState extends State<ChatView> {
     if (widget.conversation.messages.length !=
         old.conversation.messages.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         if (_scroll.hasClients) {
           _scroll.animateTo(
             _scroll.position.maxScrollExtent,
@@ -216,6 +694,20 @@ class _ChatViewState extends State<ChatView> {
           );
         }
       });
+
+      // Protocol from prompts.dart: when in PLAN mode and AI's latest
+      // message begins with `change_model(work)`, force-switch to WORK.
+      if (widget.mode == WorkMode.plan) {
+        for (final m in widget.conversation.messages) {
+          if (m.sender != Sender.assistant) continue;
+          if (_autoSwitchedFor.contains(m.id)) continue;
+          if (_hasChangeModelMarker(m.text)) {
+            _autoSwitchedFor.add(m.id);
+            widget.onModeChanged(WorkMode.work);
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -236,7 +728,10 @@ class _ChatViewState extends State<ChatView> {
             if (conv.messages.isEmpty)
               Expanded(
                 child: Center(
-                  child: _HeroTitle(text: widget.greeting, accent: widget.accent),
+                  child: _HeroTitle(
+                    text: widget.greeting,
+                    accent: widget.accent,
+                  ),
                 ),
               )
             else
@@ -244,18 +739,33 @@ class _ChatViewState extends State<ChatView> {
                 child: ListView.builder(
                   controller: _scroll,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 16),
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   itemCount: conv.messages.length,
                   itemBuilder: (context, i) {
-                    return _MessageBubble(
-                      message: conv.messages[i],
-                      accent: widget.accent,
+                    final message = conv.messages[i];
+                    return AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, anim) {
+                        return FadeTransition(opacity: anim, child: child);
+                      },
+                      child: KeyedSubtree(
+                        key: ValueKey(message.id),
+                        child: _MessageBubble(
+                          message: message,
+                          accent: widget.accent,
+                          palette: context.palette,
+                        ),
+                      ),
                     );
                   },
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 14),
               child: ControlsCard(
                 mode: widget.mode,
                 thinking: widget.thinking,
@@ -274,10 +784,15 @@ class _ChatViewState extends State<ChatView> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.accent});
+  const _MessageBubble({
+    required this.message,
+    required this.accent,
+    required this.palette,
+  });
 
   final Message message;
   final Color accent;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -295,11 +810,12 @@ class _MessageBubble extends StatelessWidget {
         alignment: align,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.7,
+            maxWidth: MediaQuery.of(context).size.width * 0.64,
           ),
           child: Column(
-            crossAxisAlignment:
-                isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: isUser
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
             children: [
               Text(
                 label,
@@ -312,7 +828,9 @@ class _MessageBubble extends StatelessWidget {
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                  horizontal: 12,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   color: bg,
                   borderRadius: BorderRadius.circular(14),
@@ -330,7 +848,9 @@ class _MessageBubble extends StatelessWidget {
                             for (final a in message.attachments)
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: AppColors.surfaceAlt,
                                   borderRadius: BorderRadius.circular(6),
@@ -350,43 +870,50 @@ class _MessageBubble extends StatelessWidget {
                       data: message.text,
                       selectable: true,
                       styleSheet: MarkdownStyleSheet(
-                        p: TextStyle(color: fg, fontSize: 14, height: 1.5),
+                        p: TextStyle(color: fg, fontSize: 13.5, height: 1.45),
                         h1: TextStyle(
-                            color: fg,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700),
-                        h2: TextStyle(
-                            color: fg,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700),
-                        h3: TextStyle(
-                            color: fg,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600),
-                        strong: TextStyle(
-                            color: fg, fontWeight: FontWeight.w700),
-                        em: TextStyle(
-                            color: fg, fontStyle: FontStyle.italic),
-                        code: TextStyle(
                           color: fg,
-                          backgroundColor: AppColors.surfaceAlt,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        h2: TextStyle(
+                          color: fg,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        h3: TextStyle(
+                          color: fg,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        strong: TextStyle(
+                          color: fg,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        em: TextStyle(color: fg, fontStyle: FontStyle.italic),
+                        code: TextStyle(
+                          color: palette.codeFg,
+                          backgroundColor: palette.codeBg,
                           fontFamily: 'monospace',
                           fontSize: 13,
                         ),
                         codeblockDecoration: BoxDecoration(
-                          color: AppColors.surfaceAlt,
+                          color: palette.codeblockBg,
+                          border: Border.all(color: AppColors.border, width: 1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        codeblockPadding: const EdgeInsets.all(10),
+                        codeblockPadding: const EdgeInsets.all(12),
                         blockquoteDecoration: BoxDecoration(
                           border: Border(
                             left: BorderSide(color: accent, width: 3),
                           ),
                         ),
                         blockquotePadding: const EdgeInsets.only(left: 10),
-                        listBullet: TextStyle(color: fg, fontSize: 14),
+                        listBullet: TextStyle(color: fg, fontSize: 13.5),
                         tableHead: TextStyle(
-                            color: fg, fontWeight: FontWeight.w700),
+                          color: fg,
+                          fontWeight: FontWeight.w700,
+                        ),
                         tableBorder: TableBorder.all(
                           color: AppColors.border,
                           width: 1,
@@ -418,14 +945,34 @@ class _ToolBubbleState extends State<_ToolBubble> {
 
   String _toolLabel(String? name) {
     switch (name) {
+      case 'agent.prometheus':
+        return 'Prometheus';
+      case 'agent.metis':
+        return 'Metis';
+      case 'agent.oracle':
+        return 'Oracle';
+      case 'agent.artistry':
+        return 'Artistry';
+      case 'agent.librarian':
+        return 'Librarian';
+      case 'agent.explorer':
+        return 'Explorer';
       case 'webfetch':
-        return '网页抓取';
+        return I18n.t('tool.webfetch');
       case 'websearch':
-        return '网页搜索';
+        return I18n.t('tool.websearch');
+      case 'listfiles':
+        return I18n.t('tool.listfiles');
+      case 'readfile':
+        return I18n.t('tool.readfile');
+      case 'writefile':
+        return I18n.t('tool.writefile');
+      case 'replacefile':
+        return I18n.t('tool.replacefile');
       case 'command':
-        return '执行命令';
+        return I18n.t('tool.command');
       default:
-        return name ?? '工具';
+        return name ?? I18n.t('tool.generic');
     }
   }
 
@@ -441,13 +988,13 @@ class _ToolBubbleState extends State<_ToolBubble> {
     String status;
     Color statusColor;
     if (running) {
-      status = '执行中…';
+      status = I18n.t('tool.status.running');
       statusColor = AppColors.textSecondary;
     } else if (ok == true) {
-      status = '成功';
+      status = I18n.t('tool.status.success');
       statusColor = const Color(0xFF66BB6A);
     } else if (ok == false) {
-      status = '失败';
+      status = I18n.t('tool.status.failed');
       statusColor = Colors.redAccent;
     } else {
       status = '';
@@ -460,7 +1007,7 @@ class _ToolBubbleState extends State<_ToolBubble> {
         alignment: Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.7,
+            maxWidth: MediaQuery.of(context).size.width * 0.64,
           ),
           child: Material(
             color: AppColors.surfaceAlt,
@@ -474,10 +1021,14 @@ class _ToolBubbleState extends State<_ToolBubble> {
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
-              onTap: hasResult ? () => setState(() => _expanded = !_expanded) : null,
+              onTap: hasResult
+                  ? () => setState(() => _expanded = !_expanded)
+                  : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
+                  horizontal: 11,
+                  vertical: 9,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -488,7 +1039,7 @@ class _ToolBubbleState extends State<_ToolBubble> {
                         Text('🔧', style: TextStyle(fontSize: 13)),
                         const SizedBox(width: 6),
                         Text(
-                          '工具使用',
+                          I18n.t('tool.use'),
                           style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 11,
@@ -506,19 +1057,31 @@ class _ToolBubbleState extends State<_ToolBubble> {
                         ),
                         if (status.isNotEmpty) ...[
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              status,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            transitionBuilder: (child, anim) {
+                              return FadeTransition(
+                                opacity: anim,
+                                child: child,
+                              );
+                            },
+                            child: Container(
+                              key: ValueKey(status),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                status,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
@@ -530,8 +1093,7 @@ class _ToolBubbleState extends State<_ToolBubble> {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.5,
-                              valueColor: AlwaysStoppedAnimation(
-                                  widget.accent),
+                              valueColor: AlwaysStoppedAnimation(widget.accent),
                             ),
                           ),
                         ],
@@ -626,13 +1188,13 @@ class _HeroTitle extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        BrandLogo(size: 44, showText: false, color: accent),
-        const SizedBox(width: 16),
+        BrandLogo(size: 38, showText: false, color: accent),
+        const SizedBox(width: 14),
         Text(
           text,
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 40,
+            fontSize: 34,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
           ),
@@ -664,16 +1226,14 @@ class ControlsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final thinkingOn = thinking != ThinkingLevel.fast;
-
     return Container(
-      width: 820,
+      width: 760,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -681,63 +1241,16 @@ class ControlsCard extends StatelessWidget {
           Row(
             children: [
               _ModeTabs(mode: mode, onChanged: onModeChanged, accent: accent),
-              const SizedBox(width: 16),
-              Container(width: 1, height: 22, color: AppColors.border),
-              const SizedBox(width: 16),
-              Text(
-                I18n.t('thinking.label'),
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(width: 8),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: thinkingOn ? accentSoft : Colors.transparent,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: thinkingOn
-                        ? accent.withValues(alpha: 0.4)
-                        : AppColors.border,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.bolt,
-                      size: 13,
-                      color: thinkingOn ? accent : AppColors.textTertiary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      thinkingOn
-                          ? I18n.t('thinking.on')
-                          : I18n.t('thinking.off'),
-                      style: TextStyle(
-                        color: thinkingOn ? accent : AppColors.textTertiary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+              const Spacer(),
+              _ThinkingMenuButton(
+                thinking: thinking,
+                accent: accent,
+                accentSoft: accentSoft,
+                onThinkingChanged: onThinkingChanged,
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          ThinkingSlider(
-            value: thinking,
-            accent: accent,
-            onChanged: onThinkingChanged,
-          ),
-          const SizedBox(height: 6),
-          Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           ChatInput(
             mode: mode,
             thinking: thinking,
@@ -768,7 +1281,7 @@ class _ModeTabs extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(9),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
@@ -787,8 +1300,8 @@ class _ModeTabs extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: () => onChanged(m),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         decoration: BoxDecoration(
           color: selected ? accent : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -797,10 +1310,115 @@ class _ModeTabs extends StatelessWidget {
           label,
           style: TextStyle(
             color: selected ? Colors.white : AppColors.textSecondary,
-            fontSize: 13,
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.6,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThinkingMenuButton extends StatelessWidget {
+  const _ThinkingMenuButton({
+    required this.thinking,
+    required this.accent,
+    required this.accentSoft,
+    required this.onThinkingChanged,
+  });
+
+  final ThinkingLevel thinking;
+  final Color accent;
+  final Color accentSoft;
+  final ValueChanged<ThinkingLevel> onThinkingChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = thinking != ThinkingLevel.fast;
+    return PopupMenuButton<ThinkingLevel>(
+      tooltip: I18n.t('thinking.label'),
+      color: AppColors.surface,
+      onSelected: onThinkingChanged,
+      itemBuilder: (context) => [
+        PopupMenuItem<ThinkingLevel>(
+          enabled: false,
+          child: SizedBox(
+            width: 280,
+            child: ThinkingSlider(
+              value: thinking,
+              accent: accent,
+              onChanged: (v) {
+                Navigator.pop(context);
+                onThinkingChanged(v);
+              },
+            ),
+          ),
+        ),
+        const PopupMenuDivider(),
+        for (final level in ThinkingLevel.values)
+          PopupMenuItem<ThinkingLevel>(
+            value: level,
+            child: Row(
+              children: [
+                Icon(
+                  level == thinking
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 16,
+                  color: level == thinking ? accent : AppColors.textTertiary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  level.label,
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? accentSoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? accent.withValues(alpha: 0.4) : AppColors.border,
+          ),
+          boxShadow: thinking == ThinkingLevel.flagship
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.24),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bolt,
+              size: 14,
+              color: active ? accent : AppColors.textTertiary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              thinking.label,
+              style: TextStyle(
+                color: active ? accent : AppColors.textTertiary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.expand_more, size: 15, color: AppColors.textSecondary),
+          ],
         ),
       ),
     );

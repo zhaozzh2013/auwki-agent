@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../i18n/strings.dart';
+
 enum ProviderKind { claude, openai, deepseek, MiniMax }
 
 enum ApiStyle { anthropic, openai }
@@ -29,6 +31,15 @@ class ProviderConfig {
   final ApiStyle apiStyle;
   final String defaultModel;
   final List<ModelOption> models;
+
+  ProviderConfig withBaseUrl(String value) => ProviderConfig(
+    kind: kind,
+    label: label,
+    baseUrl: value,
+    apiStyle: apiStyle,
+    defaultModel: defaultModel,
+    models: models,
+  );
 }
 
 const List<ProviderConfig> kProviders = [
@@ -46,14 +57,14 @@ const List<ProviderConfig> kProviders = [
   ),
   ProviderConfig(
     kind: ProviderKind.MiniMax,
-    label: 'MiniMax (Anthropic 兼容)',
+    label: 'MiniMax (Anthropic compatible)',
     baseUrl: 'https://api.minimaxi.com/anthropic',
     apiStyle: ApiStyle.anthropic,
     defaultModel: 'MiniMax-M3',
     models: [
       ModelOption('MiniMax-M3', 'MiniMax-M3 (1M ctx)'),
-      ModelOption('MiniMax-M2.7-highspeed', 'MiniMax-M2.7 高速'),
-      ModelOption('MiniMax-M2.5-highspeed', 'MiniMax-M2.5 高速'),
+      ModelOption('MiniMax-M2.7-highspeed', 'MiniMax-M2.7 Highspeed'),
+      ModelOption('MiniMax-M2.5-highspeed', 'MiniMax-M2.5 Highspeed'),
     ],
   ),
   ProviderConfig(
@@ -81,8 +92,10 @@ const List<ProviderConfig> kProviders = [
   ),
 ];
 
-ProviderConfig providerById(String id) =>
-    kProviders.firstWhere((p) => p.kind.name == id, orElse: () => kProviders.first);
+ProviderConfig providerById(String id) => kProviders.firstWhere(
+  (p) => p.kind.name == id,
+  orElse: () => kProviders.first,
+);
 
 class ChatRequest {
   ChatRequest({
@@ -117,8 +130,7 @@ class AiClient {
 
   Stream<String> chatStream(ChatRequest req) async* {
     if (apiKey.isEmpty) {
-      yield '[错误] 未配置 API Key，请到 设置 中填写';
-      return;
+      throw Exception(I18n.t('agent.no_api_key'));
     }
     if (config.apiStyle == ApiStyle.anthropic) {
       yield* _anthropicStream(req);
@@ -141,15 +153,16 @@ class AiClient {
     final request = http.Request('POST', url)
       ..headers.addAll({
         'content-type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': _normalizedApiKey,
         'anthropic-version': '2023-06-01',
       })
       ..body = body;
 
     final response = await request.send();
     if (response.statusCode ~/ 100 != 2) {
-      yield '[错误 ${response.statusCode}] ${await response.stream.bytesToString()}';
-      return;
+      throw Exception(
+        await _formatHttpError(response.statusCode, response.stream),
+      );
     }
 
     final lines = response.stream
@@ -188,14 +201,15 @@ class AiClient {
     final request = http.Request('POST', url)
       ..headers.addAll({
         'content-type': 'application/json',
-        'authorization': 'Bearer $apiKey',
+        'authorization': 'Bearer $_normalizedApiKey',
       })
       ..body = body;
 
     final response = await request.send();
     if (response.statusCode ~/ 100 != 2) {
-      yield '[错误 ${response.statusCode}] ${await response.stream.bytesToString()}';
-      return;
+      throw Exception(
+        await _formatHttpError(response.statusCode, response.stream),
+      );
     }
 
     final lines = response.stream
@@ -214,5 +228,32 @@ class AiClient {
         if (content is String) yield content;
       } catch (_) {}
     }
+  }
+
+  String get _normalizedApiKey {
+    final trimmed = apiKey.trim();
+    return trimmed.toLowerCase().startsWith('bearer ')
+        ? trimmed.substring(7).trim()
+        : trimmed;
+  }
+
+  Future<String> _formatHttpError(
+    int statusCode,
+    http.ByteStream stream,
+  ) async {
+    final body = await stream.bytesToString();
+    if (statusCode == 401 || statusCode == 403) {
+      return I18n.t('agent.error.auth_failed', {'provider': config.label});
+    }
+    return I18n.t('agent.error.http_status', {
+      'code': '$statusCode',
+      'body': _sanitizeErrorBody(body),
+    });
+  }
+
+  String _sanitizeErrorBody(String body) {
+    return body
+        .replaceAll(RegExp(r'sk-[A-Za-z0-9_\-]{8,}'), 'sk-***')
+        .replaceAll(RegExp(r'Bearer\s+[A-Za-z0-9_\.\-]{8,}'), 'Bearer ***');
   }
 }

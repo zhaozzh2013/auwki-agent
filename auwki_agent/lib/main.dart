@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_state.dart';
 import 'i18n/strings.dart';
@@ -21,6 +22,32 @@ class AuwkiAgentApp extends StatefulWidget {
 class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
   final ChatStore _store = ChatStore();
   final SettingsStore _settings = SettingsStore();
+  double _zoom = 1.0;
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final control =
+        HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+    if (!control) return KeyEventResult.ignored;
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.equal ||
+        key == LogicalKeyboardKey.numpadAdd) {
+      setState(() => _zoom = (_zoom + 0.25).clamp(0.75, 2.0));
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.minus ||
+        key == LogicalKeyboardKey.numpadSubtract) {
+      setState(() => _zoom = (_zoom - 0.25).clamp(0.75, 2.0));
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
+      setState(() => _zoom = 1.0);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +64,18 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
             title: I18n.t('app.title'),
             debugShowCheckedModeBanner: false,
             theme: _buildTheme(isDark, palette),
-            home: HomePage(),
+            builder: (context, child) {
+              final media = MediaQuery.of(context);
+              return Focus(
+                autofocus: true,
+                onKeyEvent: _handleKey,
+                child: MediaQuery(
+                  data: media.copyWith(textScaler: TextScaler.linear(_zoom)),
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              );
+            },
+            home: const HomePage(),
           );
         },
       ),
@@ -53,10 +91,7 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       highlightColor: Colors.transparent,
       hoverColor: palette.hover,
       colorScheme: isDark
-          ? ColorScheme.dark(
-              primary: palette.primary,
-              surface: palette.surface,
-            )
+          ? ColorScheme.dark(primary: palette.primary, surface: palette.surface)
           : ColorScheme.light(
               primary: palette.primary,
               surface: palette.surface,
@@ -72,6 +107,11 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
           borderRadius: const BorderRadius.all(Radius.circular(6)),
         ),
         textStyle: TextStyle(color: palette.textPrimary, fontSize: 12),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: palette.primary,
+        selectionColor: palette.primary.withValues(alpha: 0.35),
+        selectionHandleColor: palette.primary,
       ),
       extensions: [palette],
     );

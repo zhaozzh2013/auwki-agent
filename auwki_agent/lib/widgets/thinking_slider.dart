@@ -37,16 +37,16 @@ class ThinkingSlider extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: 30,
+          height: 26,
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              trackHeight: 5,
+              trackHeight: 4,
               activeTrackColor: c,
               inactiveTrackColor: AppColors.border,
               thumbColor: Colors.white,
               overlayColor: c.withValues(alpha: 0.12),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             ),
             child: Slider(
               min: 0,
@@ -58,7 +58,7 @@ class ThinkingSlider extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Row(
           children: [
             for (var i = 0; i < ThinkingLevel.values.length; i++)
@@ -90,7 +90,7 @@ class _LevelLabel extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
         color: active ? AppColors.textPrimary : AppColors.textTertiary,
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: active ? FontWeight.w600 : FontWeight.w400,
       ),
     );

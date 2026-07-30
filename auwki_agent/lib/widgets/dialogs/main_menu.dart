@@ -8,9 +8,16 @@ import 'settings_dialog.dart';
 Future<void> showMainMenu(BuildContext context, Offset position) async {
   final box = context.findRenderObject() as RenderBox?;
   final pos = box?.localToGlobal(Offset.zero) ?? position;
-  await showMenu<int>(
+  final size = box?.size ?? Size.zero;
+
+  final result = await showMenu<int>(
     context: context,
-    position: RelativeRect.fromLTRB(pos.dx + 40, pos.dy + 30, pos.dx + 41, pos.dy + 31),
+    position: RelativeRect.fromLTRB(
+      pos.dx,
+      pos.dy + size.height + 6,
+      pos.dx + size.width,
+      pos.dy + size.height + 7,
+    ),
     color: AppColors.surface,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(10),
@@ -18,19 +25,23 @@ Future<void> showMainMenu(BuildContext context, Offset position) async {
     ),
     items: [
       PopupMenuItem(
-        onTap: () => Future.delayed(
-            const Duration(milliseconds: 50),
-            () => showProfileDialog(context)),
+        value: 1,
         child: _row(Icons.person_outline, I18n.t('menu.profile')),
       ),
       PopupMenuItem(
-        onTap: () => Future.delayed(
-            const Duration(milliseconds: 50),
-            () => showSettingsDialog(context)),
+        value: 2,
         child: _row(Icons.settings_outlined, I18n.t('menu.settings')),
       ),
     ],
   );
+
+  if (!context.mounted) return;
+
+  if (result == 1) {
+    showProfileDialog(context);
+  } else if (result == 2) {
+    showSettingsDialog(context);
+  }
 }
 
 Widget _row(IconData icon, String label) {

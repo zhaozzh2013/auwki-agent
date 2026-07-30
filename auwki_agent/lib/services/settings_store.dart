@@ -10,6 +10,8 @@ import 'ai_providers.dart';
 
 enum AppTheme { dark, light }
 
+enum CostMode { poor, medium, max }
+
 class SettingsStore extends ChangeNotifier {
   SettingsStore() {
     _load();
@@ -18,9 +20,12 @@ class SettingsStore extends ChangeNotifier {
   ProviderConfig _provider = kProviders.first;
   String _model = kProviders.first.defaultModel;
   String _apiKey = '';
+  String _baseUrl = kProviders.first.baseUrl;
   AppTheme _theme = AppTheme.dark;
-  String _userName = '用户名';
-  String _userInitial = '口';
+  String _userName = I18n.t('sidebar.user');
+  String _userInitial = I18n.t('profile.initial.default');
+  bool _enterToSend = true;
+  CostMode _costMode = CostMode.medium;
 
   bool _ready = false;
   bool get isReady => _ready;
@@ -28,11 +33,15 @@ class SettingsStore extends ChangeNotifier {
   ProviderConfig get provider => _provider;
   String get model => _model;
   String get apiKey => _apiKey;
+  String get baseUrl => _baseUrl;
   AppTheme get theme => _theme;
   String get userName => _userName;
   String get userInitial => _userInitial;
+  bool get enterToSend => _enterToSend;
+  CostMode get costMode => _costMode;
 
-  AiClient get client => AiClient(config: _provider, apiKey: _apiKey);
+  AiClient get client =>
+      AiClient(config: _provider.withBaseUrl(_baseUrl), apiKey: _apiKey);
 
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
@@ -53,12 +62,15 @@ class SettingsStore extends ChangeNotifier {
         } else {
           _model = _provider.defaultModel;
         }
+        _baseUrl = (m['baseUrl'] as String?) ?? _provider.baseUrl;
         _apiKey = (m['apiKey'] as String?) ?? '';
         final loc = m['locale'] as String?;
         if (loc != null) {
           final parts = loc.split('_');
-          I18n.locale.value =
-              Locale(parts[0], parts.length > 1 ? parts[1] : null);
+          I18n.locale.value = Locale(
+            parts[0],
+            parts.length > 1 ? parts[1] : null,
+          );
         }
         final th = m['theme'] as String?;
         if (th != null) {
@@ -69,6 +81,14 @@ class SettingsStore extends ChangeNotifier {
         }
         _userName = (m['userName'] as String?) ?? _userName;
         _userInitial = (m['userInitial'] as String?) ?? _userInitial;
+        _enterToSend = (m['enterToSend'] as bool?) ?? _enterToSend;
+        final cost = m['costMode'] as String?;
+        if (cost != null) {
+          _costMode = CostMode.values.firstWhere(
+            (x) => x.name == cost,
+            orElse: () => CostMode.medium,
+          );
+        }
       }
     } catch (_) {}
     _ready = true;
@@ -95,10 +115,12 @@ class SettingsStore extends ChangeNotifier {
     if (!_provider.models.any((m) => m.id == _model)) {
       _model = _provider.defaultModel;
     }
+    _baseUrl = _provider.baseUrl;
     notifyListeners();
     await _save({
       'provider': _provider.kind.name,
       'model': _model,
+      'baseUrl': _baseUrl,
     });
   }
 
@@ -114,12 +136,17 @@ class SettingsStore extends ChangeNotifier {
     await _save({'apiKey': key});
   }
 
+  Future<void> setBaseUrl(String url) async {
+    final trimmed = url.trim();
+    _baseUrl = trimmed.isEmpty ? _provider.baseUrl : trimmed;
+    notifyListeners();
+    await _save({'baseUrl': _baseUrl});
+  }
+
   Future<void> setLocale(Locale loc) async {
     I18n.locale.value = loc;
     notifyListeners();
-    await _save({
-      'locale': '${loc.languageCode}_${loc.countryCode ?? ''}',
-    });
+    await _save({'locale': '${loc.languageCode}_${loc.countryCode ?? ''}'});
   }
 
   Future<void> setTheme(AppTheme t) async {
@@ -133,5 +160,17 @@ class SettingsStore extends ChangeNotifier {
     _userInitial = initial;
     notifyListeners();
     await _save({'userName': name, 'userInitial': initial});
+  }
+
+  Future<void> setEnterToSend(bool v) async {
+    _enterToSend = v;
+    notifyListeners();
+    await _save({'enterToSend': v});
+  }
+
+  Future<void> setCostMode(CostMode mode) async {
+    _costMode = mode;
+    notifyListeners();
+    await _save({'costMode': mode.name});
   }
 }

@@ -24,8 +24,10 @@ class _SettingsDialog extends StatelessWidget {
       animation: settings,
       builder: (context, _) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: Text(I18n.t('settings.title'),
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        title: Text(
+          I18n.t('settings.title'),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+        ),
         content: _SettingsForm(settings: settings),
       ),
     );
@@ -41,6 +43,7 @@ class _SettingsForm extends StatefulWidget {
 
 class _SettingsFormState extends State<_SettingsForm> {
   late final TextEditingController _apiKey;
+  late final TextEditingController _baseUrl;
   bool _obscure = true;
   bool _initialized = false;
 
@@ -48,17 +51,20 @@ class _SettingsFormState extends State<_SettingsForm> {
   void initState() {
     super.initState();
     _apiKey = TextEditingController();
+    _baseUrl = TextEditingController();
   }
 
   void _ensureInitialized() {
     if (_initialized) return;
     _apiKey.text = widget.settings.apiKey;
+    _baseUrl.text = widget.settings.baseUrl;
     _initialized = true;
   }
 
   @override
   void dispose() {
     _apiKey.dispose();
+    _baseUrl.dispose();
     super.dispose();
   }
 
@@ -73,7 +79,7 @@ class _SettingsFormState extends State<_SettingsForm> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _label('供应商'),
+            _label(I18n.t('settings.provider')),
             DropdownButton<String>(
               value: s.provider.kind.name,
               isExpanded: true,
@@ -81,17 +87,14 @@ class _SettingsFormState extends State<_SettingsForm> {
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
               items: [
                 for (final p in kProviders)
-                  DropdownMenuItem(
-                    value: p.kind.name,
-                    child: Text(p.label),
-                  ),
+                  DropdownMenuItem(value: p.kind.name, child: Text(p.label)),
               ],
               onChanged: (v) async {
                 if (v != null) await s.setProvider(v);
               },
             ),
             const SizedBox(height: 8),
-            _label('模型'),
+            _label(I18n.t('settings.model')),
             DropdownButton<String>(
               value: s.model,
               isExpanded: true,
@@ -104,6 +107,23 @@ class _SettingsFormState extends State<_SettingsForm> {
               onChanged: (v) async {
                 if (v != null) await s.setModel(v);
               },
+            ),
+            const SizedBox(height: 16),
+            _label(I18n.t('settings.base_url')),
+            TextField(
+              controller: _baseUrl,
+              cursorColor: AppColors.primary,
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: s.provider.baseUrl,
+                hintStyle: TextStyle(color: AppColors.textTertiary),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             _label('API Key'),
@@ -132,27 +152,54 @@ class _SettingsFormState extends State<_SettingsForm> {
               ),
             ),
             const SizedBox(height: 16),
-            _label('语言'),
+            _label(I18n.t('settings.language')),
             _segRow(
-              options: const [
-                ('zh_CN', '中文'),
+              options: [
+                ('zh_CN', I18n.t('settings.language.zh')),
                 ('en_US', 'English'),
               ],
-              current: '${I18n.locale.value.languageCode}_${I18n.locale.value.countryCode ?? ''}',
+              current:
+                  '${I18n.locale.value.languageCode}_${I18n.locale.value.countryCode ?? ''}',
               onSelect: (code) {
                 final parts = code.split('_');
-                s.setLocale(Locale(parts[0], parts.length > 1 ? parts[1] : null));
+                s.setLocale(
+                  Locale(parts[0], parts.length > 1 ? parts[1] : null),
+                );
               },
             ),
             const SizedBox(height: 16),
-            _label('主题'),
+            _label(I18n.t('settings.theme')),
             _segRow(
-              options: const [
-                ('dark', '深色'),
-                ('light', '浅色'),
+              options: [
+                ('dark', I18n.t('settings.theme.dark')),
+                ('light', I18n.t('settings.theme.light')),
               ],
               current: s.theme.name,
-              onSelect: (v) => s.setTheme(AppTheme.values.firstWhere((t) => t.name == v)),
+              onSelect: (v) =>
+                  s.setTheme(AppTheme.values.firstWhere((t) => t.name == v)),
+            ),
+            const SizedBox(height: 16),
+            _label(I18n.t('settings.enter_to_send')),
+            _segRow(
+              options: [
+                ('on', I18n.t('settings.enter.send')),
+                ('off', I18n.t('settings.enter.newline')),
+              ],
+              current: s.enterToSend ? 'on' : 'off',
+              onSelect: (v) => s.setEnterToSend(v == 'on'),
+            ),
+            const SizedBox(height: 16),
+            _label(I18n.t('settings.cost_mode')),
+            _segRow(
+              options: [
+                ('poor', I18n.t('settings.cost.poor')),
+                ('medium', I18n.t('settings.cost.medium')),
+                ('max', I18n.t('settings.cost.max')),
+              ],
+              current: s.costMode.name,
+              onSelect: (v) => s.setCostMode(
+                CostMode.values.firstWhere((mode) => mode.name == v),
+              ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -160,17 +207,22 @@ class _SettingsFormState extends State<_SettingsForm> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(I18n.t('dialog.cancel'),
-                      style: TextStyle(color: AppColors.textSecondary)),
+                  child: Text(
+                    I18n.t('dialog.cancel'),
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: () async {
+                    await s.setBaseUrl(_baseUrl.text);
                     await s.setApiKey(_apiKey.text.trim());
                     if (context.mounted) Navigator.pop(context);
                   },
-                  child: Text(I18n.t('dialog.confirm'),
-                      style: TextStyle(color: AppColors.primary)),
+                  child: Text(
+                    I18n.t('dialog.confirm'),
+                    style: TextStyle(color: AppColors.primary),
+                  ),
                 ),
               ],
             ),
@@ -181,10 +233,12 @@ class _SettingsFormState extends State<_SettingsForm> {
   }
 
   Widget _label(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(t,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      t,
+      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+    ),
+  );
 
   Widget _segRow({
     required List<(String, String)> options,
@@ -208,7 +262,9 @@ class _SettingsFormState extends State<_SettingsForm> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   decoration: BoxDecoration(
-                    color: current == val ? AppColors.primary : Colors.transparent,
+                    color: current == val
+                        ? AppColors.primary
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   alignment: Alignment.center,

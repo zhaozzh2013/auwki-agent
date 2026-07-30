@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../i18n/strings.dart';
@@ -10,8 +11,10 @@ import '../models/models.dart';
 import '../services/agent.dart';
 import '../services/ai_providers.dart';
 import '../services/prompts.dart';
+import '../services/settings_store.dart';
 import '../state/chat_store.dart';
 import '../theme.dart';
+import '../widgets/dialogs/settings_dialog.dart';
 import '../widgets/thinking_slider.dart';
 import '../work_mode.dart';
 
@@ -39,12 +42,10 @@ class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focus = FocusNode();
   bool _hasText = false;
-  bool _deepThink = true;
-  bool _smartSearch = false;
   bool _sending = false;
+  final Map<String, DateTime> _lastStreamUiUpdates = {};
 
   Color get _accent => widget.accent ?? AppColors.primary;
-  Color get _accentSoft => widget.accentSoft ?? AppColors.primarySoft;
 
   @override
   void initState() {
@@ -62,6 +63,27 @@ class _ChatInputState extends State<ChatInput> {
     super.dispose();
   }
 
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.enter) {
+      return KeyEventResult.ignored;
+    }
+    final enterToSend = AppState.settingsOf(context).enterToSend;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    if (enterToSend && !shift) {
+      _send();
+      return KeyEventResult.handled;
+    }
+    if (!enterToSend && shift) {
+      return KeyEventResult.handled;
+    }
+    if (!enterToSend) {
+      _send();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   Future<void> _pickFile() async {
     final messenger = ScaffoldMessenger.of(context);
     final picked = await FilePicker.pickFiles(
@@ -73,9 +95,9 @@ class _ChatInputState extends State<ChatInput> {
     final pf = picked.files.first;
     final path = pf.path;
     if (path == null) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(I18n.t('attach.error.read', {'name': pf.name})),
-      ));
+      messenger.showSnackBar(
+        SnackBar(content: Text(I18n.t('attach.error.read', {'name': pf.name}))),
+      );
       return;
     }
 
@@ -84,18 +106,20 @@ class _ChatInputState extends State<ChatInput> {
 
     final size = await file.length();
     if (size > 5 * 1024 * 1024) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(I18n.t('attach.too_large', {'name': pf.name})),
-      ));
+      messenger.showSnackBar(
+        SnackBar(content: Text(I18n.t('attach.too_large', {'name': pf.name}))),
+      );
       return;
     }
 
     final bytes = await file.readAsBytes();
     final isBinary = _looksBinary(bytes);
     if (isBinary) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(I18n.t('attach.error.binary', {'name': pf.name})),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(I18n.t('attach.error.binary', {'name': pf.name})),
+        ),
+      );
       return;
     }
 
@@ -132,20 +156,20 @@ class _ChatInputState extends State<ChatInput> {
   String _guessMime(String path) {
     final ext = path.split('.').last.toLowerCase();
     return {
-      'txt': 'text/plain',
-      'md': 'text/markdown',
-      'json': 'application/json',
-      'csv': 'text/csv',
-      'html': 'text/html',
-      'xml': 'application/xml',
-      'yml': 'text/yaml',
-      'yaml': 'text/yaml',
-      'js': 'application/javascript',
-      'ts': 'application/typescript',
-      'py': 'text/x-python',
-      'dart': 'text/x-dart',
-      'log': 'text/plain',
-    }[ext] ??
+          'txt': 'text/plain',
+          'md': 'text/markdown',
+          'json': 'application/json',
+          'csv': 'text/csv',
+          'html': 'text/html',
+          'xml': 'application/xml',
+          'yml': 'text/yaml',
+          'yaml': 'text/yaml',
+          'js': 'application/javascript',
+          'ts': 'application/typescript',
+          'py': 'text/x-python',
+          'dart': 'text/x-dart',
+          'log': 'text/plain',
+        }[ext] ??
         'text/plain';
   }
 
@@ -159,9 +183,20 @@ class _ChatInputState extends State<ChatInput> {
     final convId = widget.conversationId ?? store.newConversation();
     if (widget.conversationId == null) store.activate(convId);
 
+    if (_handleSlashCommand(store, convId, text)) {
+      _controller.clear();
+      return;
+    }
+
+    final effectiveText = _expandSlashPrompt(text);
+
     if (settings.apiKey.isEmpty) {
-      _sendTo(store, convId,
-          text: text, assistantText: I18n.t('chat.no_key'));
+      _sendTo(
+        store,
+        convId,
+        text: effectiveText,
+        assistantText: I18n.t('chat.no_key'),
+      );
       return;
     }
 
@@ -170,7 +205,7 @@ class _ChatInputState extends State<ChatInput> {
     final userMsg = Message(
       id: 'm_${DateTime.now().microsecondsSinceEpoch}',
       sender: Sender.user,
-      text: text,
+      text: effectiveText,
     );
     store.addMessage(convId, userMsg);
 
@@ -185,7 +220,8 @@ class _ChatInputState extends State<ChatInput> {
     setState(() => _sending = true);
 
     final history = <Map<String, dynamic>>[];
-    for (final m in store.conversations.firstWhere((c) => c.id == convId).messages) {
+    for (final m
+        in store.conversations.firstWhere((c) => c.id == convId).messages) {
       if (m.id == placeholderId) continue;
       if (m.sender == Sender.system) continue;
       final content = StringBuffer();
@@ -207,27 +243,248 @@ class _ChatInputState extends State<ChatInput> {
       final systemPrompt = Prompts.build(
         mode: widget.mode,
         thinking: widget.thinking,
+        costMode: settings.costMode,
       );
+      final isEnglish = I18n.locale.value.languageCode == 'en';
+      final maxFlagshipRounds = switch (settings.costMode) {
+        CostMode.poor => 1,
+        CostMode.medium => 3,
+        CostMode.max => 5,
+      };
+      final subAgentMaxTokens = switch (settings.costMode) {
+        CostMode.poor => 700,
+        CostMode.medium => 1200,
+        CostMode.max => 1800,
+      };
+      final finalMaxTokens = switch (settings.costMode) {
+        CostMode.poor => 1000,
+        CostMode.medium => 2048,
+        CostMode.max => 3200,
+      };
+      final coordinatorMaxTokens = switch (settings.costMode) {
+        CostMode.poor => 350,
+        CostMode.medium => 700,
+        CostMode.max => 1000,
+      };
 
       var turn = 0;
       final maxTurns = 3;
       var currentHistory = List<Map<String, dynamic>>.from(history);
+
+      if (widget.thinking == ThinkingLevel.flagship &&
+          settings.costMode != CostMode.poor) {
+        var plan = await AgentRunner.planFlagshipSession(
+          chat: (system, messages) => client.chatStream(
+            ChatRequest(
+              system: system,
+              messages: messages,
+              model: settings.model,
+              maxTokens: coordinatorMaxTokens,
+            ),
+          ),
+          history: currentHistory,
+          isEnglish: isEnglish,
+        );
+
+        final allResults = <CollaborativeAgentResult>[];
+        for (var round = 1; round <= maxFlagshipRounds; round++) {
+          if (plan.complete || plan.items.isEmpty) break;
+          final plannedAgents = plan.items
+              .map(AgentRunner.agentFromPlanItem)
+              .toList();
+          final planById = {for (final item in plan.items) item.agentId: item};
+          final completed = <String>{};
+
+          store.updateMessage(
+            convId,
+            placeholderId,
+            _multiAgentStatus(
+              plannedAgents.map((a) => a.title).toList(),
+              completed,
+              round: round,
+              synthesizing: false,
+              coordinatorNote: plan.coordinatorNote,
+            ),
+            persist: false,
+          );
+
+          Future<CollaborativeAgentResult> runAgent(
+            CollaborativeAgent agent,
+          ) async {
+            final focus = planById[agent.id]?.focus ?? '';
+            final subSystem = AgentRunner.flagshipAgentSystemPrompt(
+              baseSystemPrompt: systemPrompt,
+              agentTitle: agent.title,
+              focus: focus,
+              coordinatorNote: plan.coordinatorNote,
+              isEnglish: isEnglish,
+            );
+            final subMsgId =
+                'm_${DateTime.now().microsecondsSinceEpoch}_r${round}_${agent.id}';
+            store.addMessage(
+              convId,
+              Message(
+                id: subMsgId,
+                sender: Sender.tool,
+                text: '',
+                toolName: 'agent.${agent.id}',
+                toolArgs: 'Round $round: $focus',
+                toolRunning: true,
+              ),
+            );
+            final subRaw = StringBuffer();
+            var lastSubVisible = '';
+            try {
+              await for (final chunk in client.chatStream(
+                ChatRequest(
+                  system: subSystem,
+                  messages: currentHistory,
+                  model: settings.model,
+                  maxTokens: subAgentMaxTokens,
+                ),
+              )) {
+                subRaw.write(chunk);
+                final visible = subRaw.toString();
+                if (_shouldUpdateStreamUi(subMsgId, visible, lastSubVisible)) {
+                  lastSubVisible = visible;
+                  store.updateMessage(
+                    convId,
+                    subMsgId,
+                    visible,
+                    persist: false,
+                  );
+                }
+              }
+              final result = CollaborativeAgentResult(
+                agent: agent,
+                output: subRaw.toString(),
+              );
+              if (result.output != lastSubVisible) {
+                store.updateMessage(
+                  convId,
+                  subMsgId,
+                  result.output,
+                  persist: false,
+                );
+              }
+              store.finishToolMessage(convId, subMsgId, result.output, true);
+              completed.add(agent.title);
+              store.updateMessage(
+                convId,
+                placeholderId,
+                _multiAgentStatus(
+                  plannedAgents.map((a) => a.title).toList(),
+                  completed,
+                  round: round,
+                  synthesizing: false,
+                  coordinatorNote: plan.coordinatorNote,
+                ),
+                persist: false,
+              );
+              return result;
+            } catch (e) {
+              final result = CollaborativeAgentResult(
+                agent: agent,
+                output: '',
+                error: e.toString(),
+              );
+              store.finishToolMessage(
+                convId,
+                subMsgId,
+                result.error ?? '',
+                false,
+              );
+              completed.add(agent.title);
+              store.updateMessage(
+                convId,
+                placeholderId,
+                _multiAgentStatus(
+                  plannedAgents.map((a) => a.title).toList(),
+                  completed,
+                  round: round,
+                  synthesizing: false,
+                  coordinatorNote: plan.coordinatorNote,
+                ),
+                persist: false,
+              );
+              return result;
+            }
+          }
+
+          final roundResults = await Future.wait(plannedAgents.map(runAgent));
+          allResults.addAll(roundResults);
+          store.updateMessage(
+            convId,
+            placeholderId,
+            _multiAgentStatus(
+              plannedAgents.map((a) => a.title).toList(),
+              completed,
+              round: round,
+              synthesizing: true,
+              coordinatorNote: plan.coordinatorNote,
+            ),
+            persist: false,
+          );
+
+          plan = await AgentRunner.planFlagshipRound(
+            chat: (system, messages) => client.chatStream(
+              ChatRequest(
+                system: system,
+                messages: messages,
+                model: settings.model,
+                maxTokens: coordinatorMaxTokens,
+              ),
+            ),
+            history: currentHistory,
+            previousResults: roundResults,
+            round: round,
+            isEnglish: isEnglish,
+          );
+        }
+
+        final summary = AgentRunner.formatCollaboration(
+          allResults,
+          isEnglish: isEnglish,
+        );
+        currentHistory = [
+          ...currentHistory,
+          {'role': 'assistant', 'content': summary},
+          {
+            'role': 'user',
+            'content': plan.finalInstruction.isNotEmpty
+                ? plan.finalInstruction
+                : (isEnglish
+                      ? 'Use the multi-agent collaboration notes above to produce the final answer. If needed, continue with tool calls.'
+                      : '请基于上面的多 Agent 协同结果给出最终回答；如有必要，可继续调用工具。'),
+          },
+        ];
+      }
 
       while (turn < maxTurns) {
         final req = ChatRequest(
           system: systemPrompt,
           messages: currentHistory,
           model: settings.model,
-          maxTokens: 2048,
+          maxTokens: finalMaxTokens,
         );
         final rawAcc = StringBuffer();
-        final visibleAcc = StringBuffer();
+        var lastVisible = '';
         await for (final chunk in client.chatStream(req)) {
           rawAcc.write(chunk);
-          visibleAcc
-            ..clear()
-            ..write(_stripToolBlocks(rawAcc.toString()));
-          store.updateMessage(convId, placeholderId, visibleAcc.toString());
+          final visible = _stripToolBlocks(rawAcc.toString());
+          if (_shouldUpdateStreamUi(placeholderId, visible, lastVisible)) {
+            lastVisible = visible;
+            store.updateMessage(convId, placeholderId, visible, persist: false);
+          }
+        }
+        final finalVisible = _stripToolBlocks(rawAcc.toString());
+        if (finalVisible != lastVisible) {
+          store.updateMessage(
+            convId,
+            placeholderId,
+            finalVisible,
+            persist: false,
+          );
         }
 
         final calls = AgentRunner.parse(rawAcc.toString());
@@ -252,40 +509,142 @@ class _ChatInputState extends State<ChatInput> {
           store.finishToolMessage(convId, toolMsgId, r.error ?? r.output, r.ok);
         }
 
-        currentHistory.add({
-          'role': 'assistant',
-          'content': rawAcc.toString(),
-        });
+        currentHistory.add({'role': 'assistant', 'content': rawAcc.toString()});
         final toolMsg = results
-            .map((r) =>
-                '[${r.call.tool}(${r.call.args})]\n${r.error ?? r.output}')
+            .map(
+              (r) => '[${r.call.tool}(${r.call.args})]\n${r.error ?? r.output}',
+            )
             .join('\n\n');
         currentHistory.add({
           'role': 'user',
-          'content':
-              '[执行结果]\n$toolMsg\n\n请基于以上结果继续回答，可继续使用 [正式输出] 块调用工具，或直接给出最终回答。',
+          'content': I18n.t('chat.tool_result_prompt', {'result': toolMsg}),
         });
         turn++;
       }
     } catch (e) {
-      store.updateMessage(convId, placeholderId,
-          '${I18n.t('chat.error')} $e');
+      store.updateMessage(convId, placeholderId, '${I18n.t('chat.error')} $e');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
+  bool _shouldUpdateStreamUi(String key, String next, String previous) {
+    if (next == previous) return false;
+    if (next.length - previous.length >= 24) return true;
+    final now = DateTime.now();
+    final last = _lastStreamUiUpdates[key];
+    if (last != null && now.difference(last).inMilliseconds < 80) return false;
+    _lastStreamUiUpdates[key] = now;
+    return true;
+  }
+
+  bool _handleSlashCommand(ChatStore store, String convId, String text) {
+    final normalized = text.trim().toLowerCase();
+    switch (normalized) {
+      case '/clear':
+        store.clearMessages(convId);
+        return true;
+      case '/settings':
+        showSettingsDialog(context);
+        return true;
+      case '/help':
+      case '/commands':
+        _sendTo(store, convId, text: text, assistantText: _commandHelpText());
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  String _expandSlashPrompt(String text) {
+    final trimmed = text.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == '/review' || lower.startsWith('/review ')) {
+      final target = trimmed.length > '/review'.length
+          ? trimmed.substring('/review'.length).trim()
+          : I18n.t('command.review.default_target');
+      return I18n.t('command.review.prompt', {'target': target});
+    }
+    if (lower == '/goal' || lower.startsWith('/goal ')) {
+      final goal = trimmed.length > '/goal'.length
+          ? trimmed.substring('/goal'.length).trim()
+          : I18n.t('command.goal.default_goal');
+      return I18n.t('command.goal.prompt', {'goal': goal});
+    }
+    if (lower == '/poor' || lower.startsWith('/poor ')) {
+      final request = trimmed.length > '/poor'.length
+          ? trimmed.substring('/poor'.length).trim()
+          : I18n.t('command.poor.default_request');
+      return I18n.t('command.poor.prompt', {'request': request});
+    }
+    if (lower == '/new' || lower.startsWith('/new ')) {
+      final request = trimmed.length > '/new'.length
+          ? trimmed.substring('/new'.length).trim()
+          : I18n.t('command.new.default_request');
+      return I18n.t('command.new.prompt', {'request': request});
+    }
+    return text;
+  }
+
+  String _commandHelpText() {
+    return [
+      '## ${I18n.t('command.help.title')}',
+      '- `/clear` - ${I18n.t('command.clear')}',
+      '- `/settings` - ${I18n.t('command.settings')}',
+      '- `/review [target]` - ${I18n.t('command.review')}',
+      '- `/goal <objective>` - ${I18n.t('command.goal')}',
+      '- `/poor [request]` - ${I18n.t('command.poor')}',
+      '- `/new <project>` - ${I18n.t('command.new')}',
+    ].join('\n');
+  }
+
+  String _multiAgentStatus(
+    List<String> agents,
+    Set<String> completed, {
+    required int round,
+    required bool synthesizing,
+    String? coordinatorNote,
+  }) {
+    final buf = StringBuffer();
+    buf.writeln('## ${I18n.t('multi_agent.title')}');
+    buf.writeln('Round $round');
+    if (coordinatorNote != null && coordinatorNote.trim().isNotEmpty) {
+      buf.writeln(coordinatorNote.trim());
+      buf.writeln();
+    }
+    buf.writeln();
+    for (final agent in agents) {
+      final done = completed.contains(agent);
+      buf.writeln(
+        '- $agent: ${done ? I18n.t('multi_agent.done') : I18n.t('multi_agent.running')}',
+      );
+    }
+    if (synthesizing) {
+      buf.writeln();
+      buf.writeln(I18n.t('multi_agent.synthesizing'));
+    }
+    return buf.toString().trim();
+  }
+
   String _stripToolBlocks(String text) {
-    return text.replaceAll(
+    var s = text.replaceAll(
       RegExp(r'\[正式输出\][\s\S]*?\[输出结束\]', multiLine: true),
       '',
     );
+    s = s.replaceAll(
+      RegExp(r'change_model\s*\(\s*work\s*\)', caseSensitive: false),
+      '',
+    );
+    return s.trim();
   }
 
-  void _sendTo(ChatStore store, String convId,
-      {String text = '',
-      String assistantText = '',
-      List<Attachment> attachments = const []}) {
+  void _sendTo(
+    ChatStore store,
+    String convId, {
+    String text = '',
+    String assistantText = '',
+    List<Attachment> attachments = const [],
+  }) {
     if (text.isNotEmpty || attachments.isNotEmpty) {
       store.addMessage(
         convId,
@@ -314,46 +673,45 @@ class _ChatInputState extends State<ChatInput> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 9, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _controller,
-            focusNode: _focus,
-            maxLines: 6,
-            minLines: 2,
-            enabled: !_sending,
-            cursorColor: _accent,
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
-            decoration: InputDecoration(
-              hintText: I18n.t('chat.placeholder'),
-              hintStyle:
-                  TextStyle(color: AppColors.textTertiary, fontSize: 15),
-              border: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: EdgeInsets.zero,
+          Focus(
+            onKeyEvent: _handleKey,
+            child: TextField(
+              controller: _controller,
+              focusNode: _focus,
+              maxLines: 5,
+              minLines: 1,
+              enabled: !_sending,
+              cursorColor: _accent,
+              textInputAction: AppState.settingsOf(context).enterToSend
+                  ? TextInputAction.send
+                  : TextInputAction.newline,
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: I18n.t('chat.placeholder'),
+                hintStyle: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 14,
+                ),
+                border: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              onSubmitted: (_) => _send(),
             ),
-            onSubmitted: (_) => _send(),
           ),
-          const SizedBox(height: 12),
+          if (_controller.text.trim().startsWith('/')) ...[
+            const SizedBox(height: 10),
+            _CommandHints(accent: _accent),
+          ],
+          const SizedBox(height: 10),
           Row(
             children: [
-              _toolChip(
-                icon: Icons.bolt,
-                label: I18n.t('chat.tool.deep'),
-                active: _deepThink,
-                onTap: () => setState(() => _deepThink = !_deepThink),
-              ),
-              const SizedBox(width: 8),
-              _toolChip(
-                icon: Icons.travel_explore,
-                label: I18n.t('chat.tool.search'),
-                active: _smartSearch,
-                onTap: () => setState(() => _smartSearch = !_smartSearch),
-              ),
               const Spacer(),
               _iconBtn(
                 icon: Icons.attach_file,
@@ -369,56 +727,17 @@ class _ChatInputState extends State<ChatInput> {
     );
   }
 
-  Widget _toolChip({
-    required IconData icon,
-    required String label,
-    required bool active,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? _accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: active ? _accent.withValues(alpha: 0.4) : AppColors.border,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon,
-                size: 15,
-                color: active ? _accent : AppColors.textSecondary),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                color: active ? _accent : AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _iconBtn({
     required IconData icon,
     required String tooltip,
     required VoidCallback onTap,
   }) {
     return SizedBox(
-      width: 34,
-      height: 34,
+      width: 32,
+      height: 32,
       child: IconButton(
         padding: EdgeInsets.zero,
-        iconSize: 20,
+        iconSize: 19,
         color: AppColors.textSecondary,
         tooltip: tooltip,
         onPressed: onTap,
@@ -433,12 +752,9 @@ class _ChatInputState extends State<ChatInput> {
       opacity: enabled ? 1.0 : 0.4,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _accent,
-        ),
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: _accent),
         child: Material(
           color: Colors.transparent,
           shape: const CircleBorder(),
@@ -451,14 +767,53 @@ class _ChatInputState extends State<ChatInput> {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.white.withValues(alpha: 0.9)),
+                      valueColor: AlwaysStoppedAnimation(
+                        Colors.white.withValues(alpha: 0.9),
+                      ),
                     ),
                   )
-                : Icon(Icons.arrow_upward,
-                    color: Colors.white, size: 20),
+                : Icon(Icons.arrow_upward, color: Colors.white, size: 19),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CommandHints extends StatelessWidget {
+  const _CommandHints({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final commands = [
+      ('/clear', I18n.t('command.clear')),
+      ('/settings', I18n.t('command.settings')),
+      ('/goal', I18n.t('command.goal')),
+      ('/review', I18n.t('command.review')),
+      ('/new', I18n.t('command.new')),
+      ('/poor', I18n.t('command.poor')),
+      ('/help', I18n.t('command.help')),
+    ];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final (cmd, label) in commands)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: accent.withValues(alpha: 0.28)),
+            ),
+            child: Text(
+              '$cmd  $label',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+          ),
+      ],
     );
   }
 }

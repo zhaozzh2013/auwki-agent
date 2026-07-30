@@ -13,8 +13,10 @@ Future<void> showProfileDialog(BuildContext context) async {
       animation: settings,
       builder: (context, _) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: Text(I18n.t('profile.title'),
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        title: Text(
+          I18n.t('profile.title'),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+        ),
         content: _ProfileForm(settings: settings),
       ),
     ),
@@ -68,9 +70,10 @@ class _ProfileFormState extends State<_ProfileForm> {
                 child: Text(
                   _initial.text.isEmpty ? '?' : _initial.text,
                   style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600),
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -83,7 +86,7 @@ class _ProfileFormState extends State<_ProfileForm> {
                   style: TextStyle(color: AppColors.textPrimary, fontSize: 18),
                   decoration: InputDecoration(
                     counterText: '',
-                    labelText: '头像文字',
+                    labelText: I18n.t('profile.initial'),
                     labelStyle: TextStyle(color: AppColors.textSecondary),
                     enabledBorder: UnderlineInputBorder(
                       borderSide: BorderSide(color: AppColors.border),
@@ -103,7 +106,7 @@ class _ProfileFormState extends State<_ProfileForm> {
             cursorColor: AppColors.primary,
             style: TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
-              labelText: '用户名',
+              labelText: I18n.t('sidebar.user'),
               labelStyle: TextStyle(color: AppColors.textSecondary),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.border),
@@ -119,8 +122,10 @@ class _ProfileFormState extends State<_ProfileForm> {
             children: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text(I18n.t('dialog.cancel'),
-                    style: TextStyle(color: AppColors.textSecondary)),
+                child: Text(
+                  I18n.t('dialog.cancel'),
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ),
               const SizedBox(width: 8),
               TextButton(
@@ -135,8 +140,10 @@ class _ProfileFormState extends State<_ProfileForm> {
                   );
                   if (context.mounted) Navigator.pop(context);
                 },
-                child: Text(I18n.t('dialog.confirm'),
-                    style: TextStyle(color: AppColors.primary)),
+                child: Text(
+                  I18n.t('dialog.confirm'),
+                  style: TextStyle(color: AppColors.primary),
+                ),
               ),
             ],
           ),
