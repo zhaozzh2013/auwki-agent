@@ -175,6 +175,15 @@ class AgentRunner {
   /// 格式: [正式输出]\nwebfetch("...")\n... [输出结束]
   static List<AgentToolCall> parse(String text) {
     final calls = <AgentToolCall>[];
+    final allowed = {
+      'webfetch',
+      'websearch',
+      'listfiles',
+      'readfile',
+      'writefile',
+      'replacefile',
+      'command',
+    };
     var cursor = 0;
     while (cursor < text.length) {
       final startIdx = text.indexOf('[正式输出]', cursor);
@@ -184,25 +193,78 @@ class AgentRunner {
       final slice = endIdx < 0
           ? text.substring(blockStart)
           : text.substring(blockStart, endIdx);
-      final re = RegExp(r'^(\w+)\("((?:\\.|[^"])*)"\)\s*$', multiLine: true);
-      final allowed = {
-        'webfetch',
-        'websearch',
-        'listfiles',
-        'readfile',
-        'writefile',
-        'replacefile',
-        'command',
-      };
-      for (final m in re.allMatches(slice)) {
-        final tool = m.group(1)!;
-        if (!allowed.contains(tool)) continue;
-        calls.add(AgentToolCall(tool: tool, args: _decodeToolArg(m.group(2)!)));
-      }
+      // 宽容解析：去掉可能包裹的代码围栏，然后扫描所有 tool("...")。
+      final block = slice.replaceAll('```', '');
+      calls.addAll(_parseCalls(block, allowed));
       if (endIdx < 0) break;
       cursor = endIdx + '[输出结束]'.length;
     }
     return calls;
+  }
+
+  /// 文本中是否存在工具调用块（即使块解析失败也返回 true）。
+  static bool hasToolBlock(String text) =>
+      text.contains('[正式输出]') || text.contains('[输出结束]');
+
+  static List<AgentToolCall> _parseCalls(
+    String block,
+    Set<String> allowed,
+  ) {
+    final calls = <AgentToolCall>[];
+    // 允许同一行出现多个调用；参数开头必须是有引号的字符串。
+    final head = RegExp(r'([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*"');
+    var i = 0;
+    while (i < block.length) {
+      final match = head.firstMatch(block.substring(i));
+      if (match == null) break;
+      final tool = match.group(1)!;
+      final argStart = i + match.end;
+      final argEnd = _findArgEnd(block, argStart);
+      if (argEnd < 0) break; // 参数没有闭合引号，停止避免死循环
+      if (allowed.contains(tool)) {
+        calls.add(
+          AgentToolCall(
+            tool: tool,
+            args: _decodeToolArg(block.substring(argStart, argEnd)),
+          ),
+        );
+      }
+      i = argEnd + 1;
+    }
+    return calls;
+  }
+
+  /// 找到参数结束位置（未转义的双引号，且其后（允许空白）紧跟右括号）。
+  /// 参数内未转义的双引号会被当作普通内容保留，只要它后面不是右括号。
+  static int _findArgEnd(String s, int start) {
+    var i = start;
+    var escaped = false;
+    while (i < s.length) {
+      final c = s[i];
+      if (escaped) {
+        escaped = false;
+        i++;
+        continue;
+      }
+      if (c == r'\') {
+        escaped = true;
+        i++;
+        continue;
+      }
+      if (c == '"') {
+        var j = i + 1;
+        while (j < s.length &&
+            (s[j] == ' ' ||
+                s[j] == '\t' ||
+                s[j] == '\r' ||
+                s[j] == '\n')) {
+          j++;
+        }
+        if (j >= s.length || s[j] == ')') return i;
+      }
+      i++;
+    }
+    return -1;
   }
 
   static String _decodeToolArg(String arg) => arg
@@ -369,7 +431,6 @@ Rules:
   }
 
   static String flagshipAgentSystemPrompt({
-    required String baseSystemPrompt,
     required String agentTitle,
     required String focus,
     required String coordinatorNote,
@@ -377,26 +438,32 @@ Rules:
   }) {
     if (isEnglish) {
       return '''
-$baseSystemPrompt
+You are $agentTitle, a specialist sub-agent inside the AUWKI flagship collaboration.
 
-## Multi-Agent Coordination
-- You are $agentTitle
-- Coordinator note: $coordinatorNote
-- Your assigned focus: $focus
-- Stream your own analysis naturally as you think
-- Do not claim to be the final answer
+Your only job is to help the coordinator (Sisyphus) by providing focused analysis and information about your assigned focus. You do not talk to the user, and you do not decide the final answer. The user's mode, thinking level, and cost settings do not apply to you.
+
+Coordinator note: $coordinatorNote
+Your assigned focus: $focus
+
+Rules:
+- Keep your response concise and information-dense; the coordinator will synthesize
+- Do not call tools and do not output a final answer or its markdown headings
+- Stream your analysis naturally as you think
 ''';
     }
 
     return '''
-$baseSystemPrompt
+你是 AUWKI 旗舰协作中的子代理 $agentTitle。
 
-## 多 Agent 协同分工
-- 你是 $agentTitle
-- 主协调备注：$coordinatorNote
-- 你的任务：$focus
-- 允许自然流式输出你的分析
-- 不要伪装成最终结论
+你唯一的目标是为主协调（Sisyphus）提供聚焦的分析和信息，帮助它完成综合。你不直接面对用户，也不需要给出最终答案。用户的模式、思考挡位和成本设置与你无关。
+
+主协调备注：$coordinatorNote
+你的任务：$focus
+
+规则：
+- 输出简洁、信息密集，交由主协调综合
+- 不要调用工具，不要输出最终答案或其 Markdown 标题
+- 可以自然地流式输出你的分析
 ''';
   }
 
@@ -656,17 +723,40 @@ ${agent.instruction}
     final safetyIssue = _validateCommand(cmd);
     if (safetyIssue != null) return safetyIssue;
 
-    final res = await Process.run('bash', [
-      '-c',
-      cmd,
-    ]).timeout(const Duration(seconds: 30));
-    final buf = StringBuffer();
-    if (res.stdout.toString().isNotEmpty) buf.write(res.stdout);
-    if (res.stderr.toString().isNotEmpty) {
-      if (buf.isNotEmpty) buf.write('\n--- stderr ---\n');
-      buf.write(res.stderr);
+    late final Process process;
+    try {
+      process = await Process.start('bash', ['-c', cmd]);
+    } catch (e) {
+      return '${I18n.t('agent.error.command_start_failed')}\n$e';
     }
-    buf.write('\n[exit ${res.exitCode}]');
+
+    final outFuture = process.stdout
+        .transform(utf8.decoder)
+        .join()
+        .catchError((Object _) => '');
+    final errFuture = process.stderr
+        .transform(utf8.decoder)
+        .join()
+        .catchError((Object _) => '');
+
+    late final int exitCode;
+    try {
+      exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 30),
+      );
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      return I18n.t('agent.error.command_timeout', {'command': cmd});
+    }
+    final stdout = await outFuture;
+    final stderr = await errFuture;
+    final buf = StringBuffer();
+    if (stdout.isNotEmpty) buf.write(stdout);
+    if (stderr.isNotEmpty) {
+      if (buf.isNotEmpty) buf.write('\n--- stderr ---\n');
+      buf.write(stderr);
+    }
+    buf.write('\n[exit $exitCode]');
     final out = buf.toString();
     return out.length > 6000
         ? '${out.substring(0, 6000)}\n${I18n.t('agent.truncated')}'

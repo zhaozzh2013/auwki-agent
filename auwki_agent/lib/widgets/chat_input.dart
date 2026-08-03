@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,8 +12,10 @@ import '../models/models.dart';
 import '../services/agent.dart';
 import '../services/ai_providers.dart';
 import '../services/prompts.dart';
+import '../services/round_changes.dart';
 import '../services/settings_store.dart';
 import '../state/chat_store.dart';
+import '../state/round_changes_store.dart';
 import '../theme.dart';
 import '../widgets/dialogs/settings_dialog.dart';
 import '../widgets/thinking_slider.dart';
@@ -26,6 +29,7 @@ class ChatInput extends StatefulWidget {
     this.accent,
     this.accentSoft,
     this.conversationId,
+    this.onModeChanged,
   });
 
   final WorkMode mode;
@@ -33,6 +37,7 @@ class ChatInput extends StatefulWidget {
   final Color? accent;
   final Color? accentSoft;
   final String? conversationId;
+  final ValueChanged<WorkMode>? onModeChanged;
 
   @override
   State<ChatInput> createState() => _ChatInputState();
@@ -44,6 +49,9 @@ class _ChatInputState extends State<ChatInput> {
   bool _hasText = false;
   bool _sending = false;
   final Map<String, DateTime> _lastStreamUiUpdates = {};
+  final Set<StreamSubscription<String>> _activeSubs = {};
+  final Set<String> _autoSwitchedFor = <String>{};
+  Completer<void>? _activeCancel;
 
   Color get _accent => widget.accent ?? AppColors.primary;
 
@@ -70,14 +78,10 @@ class _ChatInputState extends State<ChatInput> {
     }
     final enterToSend = AppState.settingsOf(context).enterToSend;
     final shift = HardwareKeyboard.instance.isShiftPressed;
-    if (enterToSend && !shift) {
-      _send();
-      return KeyEventResult.handled;
-    }
-    if (!enterToSend && shift) {
-      return KeyEventResult.handled;
-    }
-    if (!enterToSend) {
+    // Enter 发送模式：Enter 发送、Shift+Enter 换行；
+    // Enter 换行模式：Shift+Enter 发送、Enter 换行。
+    final shouldSend = enterToSend != shift;
+    if (shouldSend) {
       _send();
       return KeyEventResult.handled;
     }
@@ -131,6 +135,7 @@ class _ChatInputState extends State<ChatInput> {
       content: text,
     );
 
+    if (!mounted) return;
     final store = AppState.chatOf(context);
     final convId = widget.conversationId;
     if (convId == null) {
@@ -177,6 +182,7 @@ class _ChatInputState extends State<ChatInput> {
     if (_sending) return;
     final store = AppState.chatOf(context);
     final settings = AppState.settingsOf(context);
+    final roundChanges = AppState.roundChangesOf(context);
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
@@ -209,7 +215,7 @@ class _ChatInputState extends State<ChatInput> {
     );
     store.addMessage(convId, userMsg);
 
-    final placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
+    var placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
     final placeholder = Message(
       id: placeholderId,
       sender: Sender.assistant,
@@ -217,13 +223,28 @@ class _ChatInputState extends State<ChatInput> {
     );
     store.addMessage(convId, placeholder);
 
+    // 记录本轮开始前的工作目录快照，输出结束后用于生成“本轮更改”摘要。
+    // 该功能可在设置中关闭；关闭时不做快照，避免额外开销。
+    WorkspaceSnapshot? beforeSnapshot;
+    final fileActions = <String, Set<String>>{};
+    if (settings.showRoundChanges) {
+      try {
+        beforeSnapshot = await WorkspaceSnapshot.capture();
+      } catch (_) {
+        beforeSnapshot = null;
+      }
+    }
+
     setState(() => _sending = true);
+    final cancel = Completer<void>();
+    _activeCancel = cancel;
 
     final history = <Map<String, dynamic>>[];
     for (final m
         in store.conversations.firstWhere((c) => c.id == convId).messages) {
       if (m.id == placeholderId) continue;
       if (m.sender == Sender.system) continue;
+      if (m.sender == Sender.tool) continue;
       final content = StringBuffer();
       if (m.attachments.isNotEmpty) {
         for (final a in m.attachments) {
@@ -273,47 +294,50 @@ class _ChatInputState extends State<ChatInput> {
 
       if (widget.thinking == ThinkingLevel.flagship &&
           settings.costMode != CostMode.poor) {
-        var plan = await AgentRunner.planFlagshipSession(
-          chat: (system, messages) => client.chatStream(
-            ChatRequest(
-              system: system,
-              messages: messages,
-              model: settings.model,
-              maxTokens: coordinatorMaxTokens,
+        FlagshipAgentPlan plan;
+        try {
+          plan = await AgentRunner.planFlagshipSession(
+            chat: (system, messages) => _cancellable(
+              client.chatStream(
+                ChatRequest(
+                  system: system,
+                  messages: messages,
+                  model: settings.model,
+                  maxTokens: coordinatorMaxTokens,
+                ),
+              ),
+              cancel,
             ),
-          ),
-          history: currentHistory,
-          isEnglish: isEnglish,
+            history: currentHistory,
+            isEnglish: isEnglish,
+          );
+        } on TimeoutException {
+          // 主协调规划超时：退回默认协作方案，避免卡死在“规划中”。
+          plan = FlagshipAgentPlan.fallback(isEnglish);
+        }
+        if (cancel.isCompleted) return;
+        // 主协调开场白：告诉用户接下来会协调多个子代理。
+        store.updateMessage(
+          convId,
+          placeholderId,
+          I18n.t('multi_agent.announcement'),
+          persist: false,
         );
 
         final allResults = <CollaborativeAgentResult>[];
         for (var round = 1; round <= maxFlagshipRounds; round++) {
+          if (cancel.isCompleted) break;
           if (plan.complete || plan.items.isEmpty) break;
           final plannedAgents = plan.items
               .map(AgentRunner.agentFromPlanItem)
               .toList();
           final planById = {for (final item in plan.items) item.agentId: item};
-          final completed = <String>{};
-
-          store.updateMessage(
-            convId,
-            placeholderId,
-            _multiAgentStatus(
-              plannedAgents.map((a) => a.title).toList(),
-              completed,
-              round: round,
-              synthesizing: false,
-              coordinatorNote: plan.coordinatorNote,
-            ),
-            persist: false,
-          );
 
           Future<CollaborativeAgentResult> runAgent(
             CollaborativeAgent agent,
           ) async {
             final focus = planById[agent.id]?.focus ?? '';
             final subSystem = AgentRunner.flagshipAgentSystemPrompt(
-              baseSystemPrompt: systemPrompt,
               agentTitle: agent.title,
               focus: focus,
               coordinatorNote: plan.coordinatorNote,
@@ -335,26 +359,30 @@ class _ChatInputState extends State<ChatInput> {
             final subRaw = StringBuffer();
             var lastSubVisible = '';
             try {
-              await for (final chunk in client.chatStream(
-                ChatRequest(
-                  system: subSystem,
-                  messages: currentHistory,
-                  model: settings.model,
-                  maxTokens: subAgentMaxTokens,
+              await _collectStream(
+                cancel,
+                client.chatStream(
+                  ChatRequest(
+                    system: subSystem,
+                    messages: currentHistory,
+                    model: settings.model,
+                    maxTokens: subAgentMaxTokens,
+                  ),
                 ),
-              )) {
-                subRaw.write(chunk);
-                final visible = subRaw.toString();
-                if (_shouldUpdateStreamUi(subMsgId, visible, lastSubVisible)) {
-                  lastSubVisible = visible;
-                  store.updateMessage(
-                    convId,
-                    subMsgId,
-                    visible,
-                    persist: false,
-                  );
-                }
-              }
+                (chunk) {
+                  subRaw.write(chunk);
+                  final visible = subRaw.toString();
+                  if (_shouldUpdateStreamUi(subMsgId, visible, lastSubVisible)) {
+                    lastSubVisible = visible;
+                    store.updateMessage(
+                      convId,
+                      subMsgId,
+                      visible,
+                      persist: false,
+                    );
+                  }
+                },
+              );
               final result = CollaborativeAgentResult(
                 agent: agent,
                 output: subRaw.toString(),
@@ -368,19 +396,6 @@ class _ChatInputState extends State<ChatInput> {
                 );
               }
               store.finishToolMessage(convId, subMsgId, result.output, true);
-              completed.add(agent.title);
-              store.updateMessage(
-                convId,
-                placeholderId,
-                _multiAgentStatus(
-                  plannedAgents.map((a) => a.title).toList(),
-                  completed,
-                  round: round,
-                  synthesizing: false,
-                  coordinatorNote: plan.coordinatorNote,
-                ),
-                persist: false,
-              );
               return result;
             } catch (e) {
               final result = CollaborativeAgentResult(
@@ -394,52 +409,41 @@ class _ChatInputState extends State<ChatInput> {
                 result.error ?? '',
                 false,
               );
-              completed.add(agent.title);
-              store.updateMessage(
-                convId,
-                placeholderId,
-                _multiAgentStatus(
-                  plannedAgents.map((a) => a.title).toList(),
-                  completed,
-                  round: round,
-                  synthesizing: false,
-                  coordinatorNote: plan.coordinatorNote,
-                ),
-                persist: false,
-              );
               return result;
             }
           }
 
           final roundResults = await Future.wait(plannedAgents.map(runAgent));
           allResults.addAll(roundResults);
-          store.updateMessage(
-            convId,
-            placeholderId,
-            _multiAgentStatus(
-              plannedAgents.map((a) => a.title).toList(),
-              completed,
-              round: round,
-              synthesizing: true,
-              coordinatorNote: plan.coordinatorNote,
-            ),
-            persist: false,
-          );
+          if (cancel.isCompleted) break;
 
-          plan = await AgentRunner.planFlagshipRound(
-            chat: (system, messages) => client.chatStream(
-              ChatRequest(
-                system: system,
-                messages: messages,
-                model: settings.model,
-                maxTokens: coordinatorMaxTokens,
+          try {
+            plan = await AgentRunner.planFlagshipRound(
+              chat: (system, messages) => _cancellable(
+                client.chatStream(
+                  ChatRequest(
+                    system: system,
+                    messages: messages,
+                    model: settings.model,
+                    maxTokens: coordinatorMaxTokens,
+                  ),
+                ),
+                cancel,
               ),
-            ),
-            history: currentHistory,
-            previousResults: roundResults,
-            round: round,
-            isEnglish: isEnglish,
-          );
+              history: currentHistory,
+              previousResults: roundResults,
+              round: round,
+              isEnglish: isEnglish,
+            );
+          } on TimeoutException {
+            // 主协调综合超时：视为本轮信息已足够，直接进入最终综合。
+            plan = FlagshipAgentPlan(
+              items: const [],
+              coordinatorNote: '',
+              complete: true,
+              finalInstruction: '',
+            );
+          }
         }
 
         final summary = AgentRunner.formatCollaboration(
@@ -458,9 +462,29 @@ class _ChatInputState extends State<ChatInput> {
                       : '请基于上面的多 Agent 协同结果给出最终回答；如有必要，可继续调用工具。'),
           },
         ];
+        // “我将开始综合”提示 + 最终答案各自独立成条，
+        // 让工具气泡按时间顺序排列，不被堆到正式输出底部。
+        store.addMessage(
+          convId,
+          Message(
+            id: 'm_${DateTime.now().microsecondsSinceEpoch}_synth_note',
+            sender: Sender.assistant,
+            text: I18n.t('multi_agent.synthesize_start'),
+          ),
+        );
+        placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_synth';
+        store.addMessage(
+          convId,
+          Message(
+            id: placeholderId,
+            sender: Sender.assistant,
+            text: I18n.t('chat.connecting'),
+          ),
+        );
       }
 
       while (turn < maxTurns) {
+        if (cancel.isCompleted) break;
         final req = ChatRequest(
           system: systemPrompt,
           messages: currentHistory,
@@ -469,14 +493,25 @@ class _ChatInputState extends State<ChatInput> {
         );
         final rawAcc = StringBuffer();
         var lastVisible = '';
-        await for (final chunk in client.chatStream(req)) {
-          rawAcc.write(chunk);
-          final visible = _stripToolBlocks(rawAcc.toString());
-          if (_shouldUpdateStreamUi(placeholderId, visible, lastVisible)) {
-            lastVisible = visible;
-            store.updateMessage(convId, placeholderId, visible, persist: false);
-          }
-        }
+        await _collectStream(
+          cancel,
+          client.chatStream(req),
+          (chunk) {
+            rawAcc.write(chunk);
+            final visible = _stripToolBlocks(rawAcc.toString());
+            if (_shouldUpdateStreamUi(placeholderId, visible, lastVisible)) {
+              lastVisible = visible;
+              store.updateMessage(
+                convId,
+                placeholderId,
+                visible,
+                persist: false,
+              );
+            }
+          },
+        );
+        if (cancel.isCompleted) break;
+        _maybeAutoSwitchToWork(rawAcc.toString(), placeholderId);
         final finalVisible = _stripToolBlocks(rawAcc.toString());
         if (finalVisible != lastVisible) {
           store.updateMessage(
@@ -488,7 +523,54 @@ class _ChatInputState extends State<ChatInput> {
         }
 
         final calls = AgentRunner.parse(rawAcc.toString());
-        if (calls.isEmpty || widget.thinking == ThinkingLevel.fast) break;
+        final thinking = widget.thinking;
+        if (calls.isEmpty &&
+            thinking != ThinkingLevel.fast &&
+            AgentRunner.hasToolBlock(rawAcc.toString())) {
+          // 有工具块但一个调用都没解析出来：显示错误并让模型重试一次，
+          // 避免“模型以为写了文件、实际什么都没发生”的静默失败。
+          final errMsgId =
+              'm_${DateTime.now().microsecondsSinceEpoch}_parse_err';
+          store.addMessage(
+            convId,
+            Message(
+              id: errMsgId,
+              sender: Sender.tool,
+              text: '',
+              toolName: 'parse',
+              toolArgs: rawAcc.toString(),
+              toolRunning: true,
+            ),
+          );
+          store.finishToolMessage(
+            convId,
+            errMsgId,
+            I18n.t('agent.error.tool_block_parse_failed'),
+            false,
+          );
+          currentHistory.add({
+            'role': 'assistant',
+            'content': rawAcc.toString(),
+          });
+          currentHistory.add({
+            'role': 'user',
+            'content': I18n.t('chat.tool_block_retry_prompt'),
+          });
+          turn++;
+          if (turn < maxTurns) {
+            placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
+            store.addMessage(
+              convId,
+              Message(
+                id: placeholderId,
+                sender: Sender.assistant,
+                text: I18n.t('chat.connecting'),
+              ),
+            );
+          }
+          continue;
+        }
+        if (calls.isEmpty || thinking == ThinkingLevel.fast) break;
 
         final results = <AgentResult>[];
         for (final call in calls) {
@@ -504,8 +586,18 @@ class _ChatInputState extends State<ChatInput> {
               toolRunning: true,
             ),
           );
-          final r = await AgentRunner.execute(call);
+          final r = await _executeCall(call);
           results.add(r);
+          if (r.ok &&
+              (call.tool == 'writefile' || call.tool == 'replacefile')) {
+            final parts = call.args.split('|||');
+            if (parts.isNotEmpty) {
+              final key = WorkspaceSnapshot.normalizePath(parts.first.trim());
+              fileActions
+                  .putIfAbsent(key, () => <String>{})
+                  .add(call.tool == 'writefile' ? 'created' : 'modified');
+            }
+          }
           store.finishToolMessage(convId, toolMsgId, r.error ?? r.output, r.ok);
         }
 
@@ -520,11 +612,54 @@ class _ChatInputState extends State<ChatInput> {
           'content': I18n.t('chat.tool_result_prompt', {'result': toolMsg}),
         });
         turn++;
+        if (turn < maxTurns) {
+          // 下一轮回答另起一条助手消息，工具气泡保持在两轮之间的正确位置。
+          placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
+          store.addMessage(
+            convId,
+            Message(
+              id: placeholderId,
+              sender: Sender.assistant,
+              text: I18n.t('chat.connecting'),
+            ),
+          );
+        }
+      }
+
+      if (!cancel.isCompleted && settings.showRoundChanges) {
+        await _appendRoundSummary(
+          store,
+          convId,
+          beforeSnapshot,
+          fileActions,
+          roundChanges,
+        );
       }
     } catch (e) {
       store.updateMessage(convId, placeholderId, '${I18n.t('chat.error')} $e');
     } finally {
       if (mounted) setState(() => _sending = false);
+      if (identical(_activeCancel, cancel)) _activeCancel = null;
+      if (cancel.isCompleted) {
+        String current = '';
+        for (final c in store.conversations) {
+          if (c.id == convId) {
+            for (final m in c.messages) {
+              if (m.id == placeholderId) {
+                current = m.text;
+                break;
+              }
+            }
+            break;
+          }
+        }
+        final marker = I18n.t('chat.cancelled');
+        store.updateMessage(
+          convId,
+          placeholderId,
+          current.isEmpty ? marker : '$current\n\n$marker',
+        );
+      }
     }
   }
 
@@ -536,6 +671,298 @@ class _ChatInputState extends State<ChatInput> {
     if (last != null && now.difference(last).inMilliseconds < 80) return false;
     _lastStreamUiUpdates[key] = now;
     return true;
+  }
+
+  /// 输出结束后，把本轮实际发生的文件变化追加到本轮最后一条消息末尾。
+  Future<void> _appendRoundSummary(
+    ChatStore store,
+    String convId,
+    WorkspaceSnapshot? before,
+    Map<String, Set<String>> fileActions,
+    RoundChangesStore roundChanges,
+  ) async {
+    try {
+      final lines = <String>[];
+      if (before != null) {
+        final after = await WorkspaceSnapshot.capture();
+        final changes = before.diff(after);
+        for (final change in changes) {
+          change.actions.addAll(
+            fileActions[WorkspaceSnapshot.normalizePath(change.path)] ??
+                const <String>{},
+          );
+          if (change.deleted) {
+            lines.add('${change.path} -');
+            continue;
+          }
+          final counts = (change.added != null && change.removed != null)
+              ? ' +${change.added} -${change.removed}'
+              : '';
+          final action = change.actions.contains('created')
+              ? (change.actions.contains('modified')
+                    ? I18n.t('round_summary.created_modified')
+                    : I18n.t('round_summary.created'))
+              : I18n.t('round_summary.modified');
+          lines.add('${change.path}$counts [ $action ]');
+        }
+      }
+
+      // 快照失败但工具调用成功过：用工具记录兜底展示。
+      if (lines.isEmpty && fileActions.isNotEmpty) {
+        for (final entry in fileActions.entries) {
+          final actions = entry.value;
+          final action = actions.contains('created')
+              ? (actions.contains('modified')
+                    ? I18n.t('round_summary.created_modified')
+                    : I18n.t('round_summary.created'))
+              : I18n.t('round_summary.modified');
+          lines.add('${entry.key} [ $action ]');
+        }
+      }
+
+      // 没有任何变更时也输出一行，确保每轮都有总结。
+      if (lines.isEmpty) {
+        lines.add(I18n.t('round_summary.none'));
+      }
+
+      // “本轮更改”以独立气泡追加在本轮输出末尾。
+      store.addMessage(
+        convId,
+        Message(
+          id: 'm_${DateTime.now().microsecondsSinceEpoch}_summary',
+          sender: Sender.tool,
+          text: lines.join('\n'),
+          toolName: 'round_summary',
+          toolArgs: '',
+          toolOk: true,
+        ),
+      );
+      roundChanges.add(
+        RoundChangeRecord(
+          time: DateTime.now(),
+          conversationId: convId,
+          lines: lines,
+        ),
+      );
+    } catch (e) {
+      // 快照或统计失败时保持主流程不受影响，控制台留一条诊断信息。
+      debugPrint('round changes summary failed: $e');
+    }
+  }
+
+  bool _hasChangeModelMarker(String text) {
+    return RegExp(
+      r'change_model\s*\(\s*work\s*\)',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
+
+  /// PLAN 模式下，若模型输出以 `change_model(work)` 开头，自动切到 WORK。
+  /// 必须在去除协议标记之前用原始流文本判断（标记存库前会被剥离）。
+  void _maybeAutoSwitchToWork(String raw, String msgId) {
+    if (widget.mode != WorkMode.plan) return;
+    if (_autoSwitchedFor.contains(msgId)) return;
+    if (!_hasChangeModelMarker(raw)) return;
+    _autoSwitchedFor.add(msgId);
+    widget.onModeChanged?.call(WorkMode.work);
+  }
+
+  void _stop() {
+    if (!_sending) return;
+    final cancel = _activeCancel;
+    if (cancel != null && !cancel.isCompleted) cancel.complete();
+    for (final sub in List<StreamSubscription<String>>.of(_activeSubs)) {
+      sub.cancel();
+    }
+    setState(() => _sending = false);
+  }
+
+  Future<void> _collectStream(
+    Completer<void> cancel,
+    Stream<String> stream,
+    void Function(String chunk) onChunk,
+  ) async {
+    final done = Completer<void>();
+    late final StreamSubscription<String> sub;
+    Timer? watchdog;
+
+    void armWatchdog() {
+      watchdog?.cancel();
+      watchdog = Timer(const Duration(seconds: 120), () {
+        sub.cancel();
+        if (!done.isCompleted) {
+          done.completeError(
+            TimeoutException(
+              'Stream idle timeout',
+              const Duration(seconds: 120),
+            ),
+          );
+        }
+      });
+    }
+
+    sub = stream.listen(
+      (chunk) {
+        onChunk(chunk);
+        armWatchdog();
+      },
+      onDone: () {
+        watchdog?.cancel();
+        if (!done.isCompleted) done.complete();
+      },
+      onError: (Object e, StackTrace st) {
+        watchdog?.cancel();
+        if (!done.isCompleted) done.completeError(e, st);
+      },
+    );
+    _activeSubs.add(sub);
+    armWatchdog();
+    cancel.future.then((_) {
+      watchdog?.cancel();
+      sub.cancel();
+      if (!done.isCompleted) done.complete();
+    });
+    try {
+      await done.future;
+    } finally {
+      watchdog?.cancel();
+      _activeSubs.remove(sub);
+    }
+  }
+
+  /// 包装流：取消时提前结束，供 AgentRunner 内部消费的流使用。
+  Stream<String> _cancellable(
+    Stream<String> source,
+    Completer<void> cancel,
+  ) {
+    if (cancel.isCompleted) return Stream<String>.empty();
+    final controller = StreamController<String>();
+    late final StreamSubscription<String> sub;
+    Timer? watchdog;
+
+    void armWatchdog() {
+      watchdog?.cancel();
+      watchdog = Timer(const Duration(seconds: 120), () {
+        sub.cancel();
+        if (!controller.isClosed) {
+          controller.addError(
+            TimeoutException(
+              'Stream idle timeout',
+              const Duration(seconds: 120),
+            ),
+          );
+          controller.close();
+        }
+      });
+    }
+
+    sub = source.listen(
+      (chunk) {
+        controller.add(chunk);
+        armWatchdog();
+      },
+      onDone: () {
+        watchdog?.cancel();
+        _activeSubs.remove(sub);
+        controller.close();
+      },
+      onError: (Object e, StackTrace st) {
+        watchdog?.cancel();
+        _activeSubs.remove(sub);
+        controller.addError(e, st);
+        if (!controller.isClosed) controller.close();
+      },
+    );
+    _activeSubs.add(sub);
+    armWatchdog();
+    cancel.future.then((_) {
+      watchdog?.cancel();
+      sub.cancel();
+      _activeSubs.remove(sub);
+      if (!controller.isClosed) controller.close();
+    });
+    controller.onCancel = () {
+      watchdog?.cancel();
+      _activeSubs.remove(sub);
+    };
+    return controller.stream;
+  }
+
+  Future<AgentResult> _executeCall(AgentToolCall call) async {
+    if (call.tool != 'command') return AgentRunner.execute(call);
+    if (!mounted) {
+      // 组件已卸载时无法弹确认框，按“拒绝执行”处理，而不是静默放行。
+      return AgentResult(
+        call: call,
+        output: '',
+        error: I18n.t('agent.error.command_cancelled', {'command': call.args}),
+      );
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          I18n.t('dialog.command.title'),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                I18n.t('dialog.command.body'),
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.bg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text(
+                  call.args,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              I18n.t('dialog.command.deny'),
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: _accent),
+            child: Text(I18n.t('dialog.command.allow')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return AgentResult(
+        call: call,
+        output: '',
+        error: I18n.t('agent.error.command_cancelled', {'command': call.args}),
+      );
+    }
+    return AgentRunner.execute(call);
   }
 
   bool _handleSlashCommand(ChatStore store, String convId, String text) {
@@ -596,34 +1023,6 @@ class _ChatInputState extends State<ChatInput> {
       '- `/poor [request]` - ${I18n.t('command.poor')}',
       '- `/new <project>` - ${I18n.t('command.new')}',
     ].join('\n');
-  }
-
-  String _multiAgentStatus(
-    List<String> agents,
-    Set<String> completed, {
-    required int round,
-    required bool synthesizing,
-    String? coordinatorNote,
-  }) {
-    final buf = StringBuffer();
-    buf.writeln('## ${I18n.t('multi_agent.title')}');
-    buf.writeln('Round $round');
-    if (coordinatorNote != null && coordinatorNote.trim().isNotEmpty) {
-      buf.writeln(coordinatorNote.trim());
-      buf.writeln();
-    }
-    buf.writeln();
-    for (final agent in agents) {
-      final done = completed.contains(agent);
-      buf.writeln(
-        '- $agent: ${done ? I18n.t('multi_agent.done') : I18n.t('multi_agent.running')}',
-      );
-    }
-    if (synthesizing) {
-      buf.writeln();
-      buf.writeln(I18n.t('multi_agent.synthesizing'));
-    }
-    return buf.toString().trim();
   }
 
   String _stripToolBlocks(String text) {
@@ -747,7 +1146,27 @@ class _ChatInputState extends State<ChatInput> {
   }
 
   Widget _sendButton() {
-    final enabled = _hasText && !_sending;
+    if (_sending) {
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 34,
+        height: 34,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Color(0xFFE5484D),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _stop,
+            child: const Icon(Icons.stop_rounded, color: Colors.white, size: 20),
+          ),
+        ),
+      );
+    }
+    final enabled = _hasText;
     return Opacity(
       opacity: enabled ? 1.0 : 0.4,
       child: AnimatedContainer(
@@ -761,18 +1180,7 @@ class _ChatInputState extends State<ChatInput> {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: enabled ? _send : null,
-            child: _sending
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(
-                        Colors.white.withValues(alpha: 0.9),
-                      ),
-                    ),
-                  )
-                : Icon(Icons.arrow_upward, color: Colors.white, size: 19),
+            child: const Icon(Icons.arrow_upward, color: Colors.white, size: 19),
           ),
         ),
       ),

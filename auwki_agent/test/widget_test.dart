@@ -1,30 +1,23 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+// AUWKI Agent 冒烟测试：验证应用能正常构建首页并新建对话。
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:auwki_agent/i18n/strings.dart';
 import 'package:auwki_agent/main.dart';
+import 'package:auwki_agent/pages/home_page.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('AUWKI Agent renders the home page', (tester) async {
+    await tester.pumpWidget(const AuwkiAgentApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(HomePage), findsOneWidget);
+    expect(find.text(I18n.t('home.onboarding.title')), findsOneWidget);
+    expect(find.text(I18n.t('mode.work')), findsWidgets);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // 新建对话后应出现输入框（无崩溃）。
+    await tester.tap(find.text(I18n.t('sidebar.new_chat')));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text(I18n.t('chat.placeholder')), findsOneWidget);
   });
 }

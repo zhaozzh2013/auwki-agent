@@ -90,7 +90,10 @@ class _SettingsFormState extends State<_SettingsForm> {
                   DropdownMenuItem(value: p.kind.name, child: Text(p.label)),
               ],
               onChanged: (v) async {
-                if (v != null) await s.setProvider(v);
+                if (v != null) {
+                  await s.setProvider(v);
+                  if (mounted) _baseUrl.text = s.baseUrl;
+                }
               },
             ),
             const SizedBox(height: 8),
@@ -199,6 +202,38 @@ class _SettingsFormState extends State<_SettingsForm> {
               current: s.costMode.name,
               onSelect: (v) => s.setCostMode(
                 CostMode.values.firstWhere((mode) => mode.name == v),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _label(I18n.t('settings.show_round_changes')),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      I18n.t('settings.show_round_changes.desc'),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: s.showRoundChanges,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (v) => s.setShowRoundChanges(v),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 24),

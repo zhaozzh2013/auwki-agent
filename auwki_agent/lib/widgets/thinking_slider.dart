@@ -21,11 +21,13 @@ class ThinkingSlider extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.onChangeEnd,
     this.accent,
   });
 
   final ThinkingLevel value;
   final ValueChanged<ThinkingLevel> onChanged;
+  final ValueChanged<ThinkingLevel>? onChangeEnd;
   final Color? accent;
 
   @override
@@ -55,6 +57,10 @@ class ThinkingSlider extends StatelessWidget {
               value: idx.toDouble(),
               onChanged: (v) =>
                   onChanged(ThinkingLevel.values[v.round().clamp(0, 4)]),
+              onChangeEnd: onChangeEnd == null
+                  ? null
+                  : (v) =>
+                        onChangeEnd!(ThinkingLevel.values[v.round().clamp(0, 4)]),
             ),
           ),
         ),
@@ -66,6 +72,11 @@ class ThinkingSlider extends StatelessWidget {
                 child: _LevelLabel(
                   level: ThinkingLevel.values[i],
                   active: i == idx,
+                  onTap: () {
+                    final level = ThinkingLevel.values[i];
+                    onChanged(level);
+                    onChangeEnd?.call(level);
+                  },
                 ),
               ),
           ],
@@ -76,22 +87,31 @@ class ThinkingSlider extends StatelessWidget {
 }
 
 class _LevelLabel extends StatelessWidget {
-  const _LevelLabel({required this.level, required this.active});
+  const _LevelLabel({
+    required this.level,
+    required this.active,
+    this.onTap,
+  });
 
   final ThinkingLevel level;
   final bool active;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      level.label,
-      textAlign: TextAlign.center,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: active ? AppColors.textPrimary : AppColors.textTertiary,
-        fontSize: 12,
-        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Text(
+        level.label,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: active ? AppColors.textPrimary : AppColors.textTertiary,
+          fontSize: 12,
+          fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+        ),
       ),
     );
   }

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -26,6 +25,7 @@ class SettingsStore extends ChangeNotifier {
   String _userInitial = I18n.t('profile.initial.default');
   bool _enterToSend = true;
   CostMode _costMode = CostMode.medium;
+  bool _showRoundChanges = true;
 
   bool _ready = false;
   bool get isReady => _ready;
@@ -39,6 +39,7 @@ class SettingsStore extends ChangeNotifier {
   String get userInitial => _userInitial;
   bool get enterToSend => _enterToSend;
   CostMode get costMode => _costMode;
+  bool get showRoundChanges => _showRoundChanges;
 
   AiClient get client =>
       AiClient(config: _provider.withBaseUrl(_baseUrl), apiKey: _apiKey);
@@ -89,6 +90,8 @@ class SettingsStore extends ChangeNotifier {
             orElse: () => CostMode.medium,
           );
         }
+        _showRoundChanges = (m['showRoundChanges'] as bool?) ??
+            _showRoundChanges;
       }
     } catch (_) {}
     _ready = true;
@@ -172,5 +175,11 @@ class SettingsStore extends ChangeNotifier {
     _costMode = mode;
     notifyListeners();
     await _save({'costMode': mode.name});
+  }
+
+  Future<void> setShowRoundChanges(bool value) async {
+    _showRoundChanges = value;
+    notifyListeners();
+    await _save({'showRoundChanges': value});
   }
 }

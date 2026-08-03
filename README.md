@@ -28,7 +28,7 @@
 | **ChatGPT** (OpenAI) | OpenAI | GPT-4o / 4o-mini / o1-mini |
 | **DeepSeek** | OpenAI 兼容 | DeepSeek V4 Flash / Pro |
 
-这里没有写全所有的供应商，若您想要查看所有支持的供应商，请您查看[供应商查询表](docs/agents)
+这里没有写全所有的供应商，若您想要查看所有支持的供应商，请您查看[供应商查询表](docs/agents/README.md)
 
 API Key 保存在本地 `settings.json`，不会上传服务器。
 

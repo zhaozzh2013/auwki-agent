@@ -1,5 +1,5 @@
 name: auwki_agent
-description: "A new Flutter project."
+description: "AUWKI Agent - a local multi-provider AI chat desktop app with agent tool calling and multi-agent collaboration."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -38,6 +38,7 @@ dependencies:
   path_provider: ^2.1.6
   flutter_markdown: ^0.7.7+1
   file_picker: ^11.0.2
+  webview_windows: ^0.4.0
 
 dev_dependencies:
   flutter_test:

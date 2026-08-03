@@ -5,6 +5,7 @@ import 'app_state.dart';
 import 'i18n/strings.dart';
 import 'pages/home_page.dart';
 import 'state/chat_store.dart';
+import 'state/round_changes_store.dart';
 import 'services/settings_store.dart';
 import 'theme.dart';
 
@@ -22,6 +23,7 @@ class AuwkiAgentApp extends StatefulWidget {
 class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
   final ChatStore _store = ChatStore();
   final SettingsStore _settings = SettingsStore();
+  final RoundChangesStore _roundChanges = RoundChangesStore();
   double _zoom = 1.0;
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
@@ -54,6 +56,7 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     return AppState(
       chat: _store,
       settings: _settings,
+      roundChanges: _roundChanges,
       child: AnimatedBuilder(
         animation: Listenable.merge([_store, _settings, I18n.locale]),
         builder: (context, _) {

@@ -11,6 +11,9 @@ import '../state/chat_store.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/chat_input.dart';
+import '../widgets/inspector/browser_panel.dart';
+import '../widgets/inspector/git_panel.dart';
+import '../widgets/inspector/round_changes_panel.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/thinking_slider.dart';
 import '../widgets/dialogs/settings_dialog.dart';
@@ -263,7 +266,7 @@ class _FlagshipShellState extends State<_FlagshipShell>
   }
 }
 
-class _InspectorPanel extends StatelessWidget {
+class _InspectorPanel extends StatefulWidget {
   const _InspectorPanel({
     required this.conversation,
     required this.mode,
@@ -277,8 +280,15 @@ class _InspectorPanel extends StatelessWidget {
   final Color accent;
 
   @override
+  State<_InspectorPanel> createState() => _InspectorPanelState();
+}
+
+class _InspectorPanelState extends State<_InspectorPanel> {
+  int _tab = 0;
+
+  @override
   Widget build(BuildContext context) {
-    final conv = conversation;
+    final conv = widget.conversation;
     final messages = conv?.messages ?? const <Message>[];
     final toolMessages = messages
         .where((m) => m.sender == Sender.tool)
@@ -293,7 +303,7 @@ class _InspectorPanel extends StatelessWidget {
     }).length;
 
     return Container(
-      width: 286,
+      width: 340,
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(left: BorderSide(color: AppColors.border)),
@@ -308,8 +318,8 @@ class _InspectorPanel extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.dashboard_customize_outlined,
-                    size: 18,
-                    color: accent,
+                    size: 17,
+                    color: widget.accent,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -322,56 +332,186 @@ class _InspectorPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              _InspectorCard(
-                title: I18n.t('inspector.session'),
-                children: [
-                  _InspectorRow(
-                    I18n.t('inspector.mode'),
-                    mode.name.toUpperCase(),
-                  ),
-                  _InspectorRow(I18n.t('inspector.thinking'), thinking.label),
-                  _InspectorRow(
-                    I18n.t('inspector.messages'),
-                    '${messages.length}',
-                  ),
-                ],
+              const SizedBox(height: 12),
+              _TabBar(
+                selected: _tab,
+                accent: widget.accent,
+                onSelect: (i) => setState(() => _tab = i),
               ),
-              const SizedBox(height: 10),
-              _InspectorCard(
-                title: I18n.t('inspector.workflow'),
-                children: [
-                  _InspectorRow(
-                    I18n.t('inspector.running'),
-                    '${runningTools.length}',
-                  ),
-                  _InspectorRow(I18n.t('inspector.agents'), '${agents.length}'),
-                  _InspectorRow(I18n.t('inspector.blocked'), '$blocked'),
-                ],
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Expanded(
-                child: _InspectorCard(
-                  title: I18n.t('inspector.recent_tools'),
-                  children: [
-                    if (toolMessages.isEmpty)
-                      Text(
-                        I18n.t('inspector.empty'),
-                        style: TextStyle(
-                          color: AppColors.textTertiary,
-                          fontSize: 12,
-                        ),
-                      )
-                    else
-                      for (final m in toolMessages.reversed.take(8))
-                        _ToolTraceLine(message: m, accent: accent),
-                  ],
-                ),
+                child: switch (_tab) {
+                  0 => _OverviewTab(
+                    mode: widget.mode,
+                    thinking: widget.thinking,
+                    messages: messages,
+                    toolMessages: toolMessages,
+                    runningTools: runningTools,
+                    agents: agents,
+                    blocked: blocked,
+                    accent: widget.accent,
+                  ),
+                  1 => RoundChangesPanel(accent: widget.accent),
+                  2 => BrowserPanel(accent: widget.accent),
+                  _ => GitPanel(accent: widget.accent),
+                },
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TabBar extends StatelessWidget {
+  const _TabBar({
+    required this.selected,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  final int selected;
+  final Color accent;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabs = [
+      (Icons.dashboard_outlined, I18n.t('inspector.tab.overview')),
+      (Icons.difference_outlined, I18n.t('inspector.tab.changes')),
+      (Icons.public, I18n.t('inspector.tab.browser')),
+      (Icons.alt_route, 'Git'),
+    ];
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < tabs.length; i++)
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(7),
+                onTap: () => onSelect(i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: selected == i
+                        ? accent.withValues(alpha: 0.16)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        tabs[i].$1,
+                        size: 15,
+                        color: selected == i
+                            ? accent
+                            : AppColors.textSecondary,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        tabs[i].$2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: selected == i
+                              ? accent
+                              : AppColors.textSecondary,
+                          fontSize: 9.5,
+                          fontWeight: selected == i
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewTab extends StatelessWidget {
+  const _OverviewTab({
+    required this.mode,
+    required this.thinking,
+    required this.messages,
+    required this.toolMessages,
+    required this.runningTools,
+    required this.agents,
+    required this.blocked,
+    required this.accent,
+  });
+
+  final WorkMode mode;
+  final ThinkingLevel thinking;
+  final List<Message> messages;
+  final List<Message> toolMessages;
+  final List<Message> runningTools;
+  final List<Message> agents;
+  final int blocked;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        _InspectorCard(
+          title: I18n.t('inspector.session'),
+          children: [
+            _InspectorRow(
+              I18n.t('inspector.mode'),
+              mode.name.toUpperCase(),
+            ),
+            _InspectorRow(I18n.t('inspector.thinking'), thinking.label),
+            _InspectorRow(
+              I18n.t('inspector.messages'),
+              '${messages.length}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _InspectorCard(
+          title: I18n.t('inspector.workflow'),
+          children: [
+            _InspectorRow(
+              I18n.t('inspector.running'),
+              '${runningTools.length}',
+            ),
+            _InspectorRow(I18n.t('inspector.agents'), '${agents.length}'),
+            _InspectorRow(I18n.t('inspector.blocked'), '$blocked'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _InspectorCard(
+          title: I18n.t('inspector.recent_tools'),
+          children: [
+            if (toolMessages.isEmpty)
+              Text(
+                I18n.t('inspector.empty'),
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                ),
+              )
+            else
+              for (final m in toolMessages.reversed.take(8))
+                _ToolTraceLine(message: m, accent: accent),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -471,7 +611,9 @@ class _ToolTraceLine extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              message.toolName ?? I18n.t('tool.generic'),
+              message.toolName == 'round_summary'
+                  ? I18n.t('tool.round_summary')
+                  : message.toolName ?? I18n.t('tool.generic'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
@@ -672,6 +814,7 @@ class ChatView extends StatefulWidget {
 class _ChatViewState extends State<ChatView> {
   final ScrollController _scroll = ScrollController();
   final Set<String> _autoSwitchedFor = <String>{};
+  int? _lastMessageTextLength;
   bool _hasChangeModelMarker(String text) {
     return RegExp(
       r'change_model\s*\(\s*work\s*\)',
@@ -682,8 +825,14 @@ class _ChatViewState extends State<ChatView> {
   @override
   void didUpdateWidget(covariant ChatView old) {
     super.didUpdateWidget(old);
-    if (widget.conversation.messages.length !=
-        old.conversation.messages.length) {
+    final messages = widget.conversation.messages;
+    final last = messages.isEmpty ? null : messages.last.text.length;
+    final countChanged = messages.length != old.conversation.messages.length;
+    final textGrew = !countChanged &&
+        last != null &&
+        last > (_lastMessageTextLength ?? -1);
+    if (countChanged || textGrew) {
+      _lastMessageTextLength = last;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_scroll.hasClients) {
@@ -694,18 +843,18 @@ class _ChatViewState extends State<ChatView> {
           );
         }
       });
+    }
 
-      // Protocol from prompts.dart: when in PLAN mode and AI's latest
-      // message begins with `change_model(work)`, force-switch to WORK.
-      if (widget.mode == WorkMode.plan) {
-        for (final m in widget.conversation.messages) {
-          if (m.sender != Sender.assistant) continue;
-          if (_autoSwitchedFor.contains(m.id)) continue;
-          if (_hasChangeModelMarker(m.text)) {
-            _autoSwitchedFor.add(m.id);
-            widget.onModeChanged(WorkMode.work);
-            break;
-          }
+    // Protocol from prompts.dart: when in PLAN mode and AI's latest
+    // message contains `change_model(work)`, force-switch to WORK.
+    if (widget.mode == WorkMode.plan) {
+      for (final m in messages) {
+        if (m.sender != Sender.assistant) continue;
+        if (_autoSwitchedFor.contains(m.id)) continue;
+        if (_hasChangeModelMarker(m.text)) {
+          _autoSwitchedFor.add(m.id);
+          widget.onModeChanged(WorkMode.work);
+          break;
         }
       }
     }
@@ -796,6 +945,10 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.sender == Sender.tool &&
+        message.toolName == 'round_summary') {
+      return _RoundSummaryBubble(message: message, accent: accent);
+    }
     if (message.sender == Sender.tool) {
       return _ToolBubble(message: message, accent: accent);
     }
@@ -893,7 +1046,11 @@ class _MessageBubble extends StatelessWidget {
                         em: TextStyle(color: fg, fontStyle: FontStyle.italic),
                         code: TextStyle(
                           color: palette.codeFg,
-                          backgroundColor: palette.codeBg,
+                          // 半透明背景：选中文字时蓝色高亮可以透出来，
+                          // 不会被深色代码块背景完全盖住。
+                          backgroundColor: palette.codeBg.withValues(
+                            alpha: 0.5,
+                          ),
                           fontFamily: 'monospace',
                           fontSize: 13,
                         ),
@@ -928,6 +1085,86 @@ class _MessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// “本轮更改”独立气泡：显示在本轮输出的末尾。
+class _RoundSummaryBubble extends StatelessWidget {
+  const _RoundSummaryBubble({required this.message, required this.accent});
+
+  final Message message;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = message.text.split('\n');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.64,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceAlt,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.45)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.difference_outlined,
+                      size: 15,
+                      color: accent,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      I18n.t('tool.round_summary'),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                for (final line in lines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      line,
+                      style: TextStyle(
+                        color: _lineColor(line),
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _lineColor(String line) {
+    final t = line.trim();
+    if (t.isEmpty) return AppColors.textSecondary;
+    if (RegExp(r'\s-\s*$').hasMatch(t)) return Colors.redAccent;
+    if (t == I18n.t('round_summary.none')) return AppColors.textTertiary;
+    if (t.contains('+')) return const Color(0xFF66BB6A);
+    return AppColors.textPrimary;
   }
 }
 
@@ -971,6 +1208,8 @@ class _ToolBubbleState extends State<_ToolBubble> {
         return I18n.t('tool.replacefile');
       case 'command':
         return I18n.t('tool.command');
+      case 'round_summary':
+        return I18n.t('tool.round_summary');
       default:
         return name ?? I18n.t('tool.generic');
     }
@@ -982,13 +1221,18 @@ class _ToolBubbleState extends State<_ToolBubble> {
   @override
   Widget build(BuildContext context) {
     final m = widget.message;
+    final isAgent = m.toolName?.startsWith('agent.') == true;
     final running = m.toolRunning;
     final ok = m.toolOk;
     final hasResult = m.toolResult != null;
     String status;
     Color statusColor;
     if (running) {
-      status = I18n.t('tool.status.running');
+      status = isAgent
+          ? (m.text.trim().isEmpty
+                ? I18n.t('tool.status.agent_creating')
+                : I18n.t('tool.status.agent_working'))
+          : I18n.t('tool.status.running');
       statusColor = AppColors.textSecondary;
     } else if (ok == true) {
       status = I18n.t('tool.status.success');
@@ -1039,7 +1283,7 @@ class _ToolBubbleState extends State<_ToolBubble> {
                         Text('🔧', style: TextStyle(fontSize: 13)),
                         const SizedBox(width: 6),
                         Text(
-                          I18n.t('tool.use'),
+                          isAgent ? I18n.t('tool.agent') : I18n.t('tool.use'),
                           style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 11,
@@ -1257,6 +1501,7 @@ class ControlsCard extends StatelessWidget {
             accent: accent,
             accentSoft: accentSoft,
             conversationId: conversationId,
+            onModeChanged: onModeChanged,
           ),
         ],
       ),
@@ -1345,40 +1590,13 @@ class _ThinkingMenuButton extends StatelessWidget {
           enabled: false,
           child: SizedBox(
             width: 280,
-            child: ThinkingSlider(
+            child: _GearSliderItem(
               value: thinking,
               accent: accent,
-              onChanged: (v) {
-                Navigator.pop(context);
-                onThinkingChanged(v);
-              },
+              onCommit: onThinkingChanged,
             ),
           ),
         ),
-        const PopupMenuDivider(),
-        for (final level in ThinkingLevel.values)
-          PopupMenuItem<ThinkingLevel>(
-            value: level,
-            child: Row(
-              children: [
-                Icon(
-                  level == thinking
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  size: 16,
-                  color: level == thinking ? accent : AppColors.textTertiary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  level.label,
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
       ],
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
@@ -1421,6 +1639,54 @@ class _ThinkingMenuButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _GearSliderItem extends StatefulWidget {
+  const _GearSliderItem({
+    required this.value,
+    required this.accent,
+    required this.onCommit,
+  });
+
+  final ThinkingLevel value;
+  final Color accent;
+  final ValueChanged<ThinkingLevel> onCommit;
+
+  @override
+  State<_GearSliderItem> createState() => _GearSliderItemState();
+}
+
+class _GearSliderItemState extends State<_GearSliderItem> {
+  late ThinkingLevel _preview;
+
+  @override
+  void initState() {
+    super.initState();
+    _preview = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(covariant _GearSliderItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _preview = widget.value;
+    }
+  }
+
+  void _commit(ThinkingLevel level) {
+    Navigator.of(context).pop();
+    widget.onCommit(level);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ThinkingSlider(
+      value: _preview,
+      accent: widget.accent,
+      onChanged: (v) => setState(() => _preview = v),
+      onChangeEnd: _commit,
     );
   }
 }
