@@ -316,14 +316,18 @@ class BrowserService extends ChangeNotifier {
   static List<BrowserCookie> _parseNetscapeCookies(String text) {
     final result = <BrowserCookie>[];
     for (final rawLine in text.split('\n')) {
-      final line = rawLine.trim();
-      if (line.isEmpty || line.startsWith('#')) continue;
+      final trimmed = rawLine.trim();
+      if (trimmed.isEmpty) continue;
+      var line = trimmed;
+      // #HttpOnly_ 前缀是 Cookie 的一部分，不能当注释跳过。
+      if (line.toLowerCase().startsWith('#httponly_')) {
+        line = line.substring('#HttpOnly_'.length);
+      } else if (line.startsWith('#')) {
+        continue;
+      }
       final parts = line.split('\t');
       if (parts.length < 7) continue;
-      var domain = parts[0].trim();
-      if (domain.toLowerCase().startsWith('#httponly_')) {
-        domain = domain.substring(10);
-      }
+      final domain = parts[0].trim();
       if (domain.isEmpty) continue;
       // 标准 Netscape 字段：domain flag path secure expires name value；
       // 部分导出工具会在 name 前多一列 sameSite，此时字段数为 8。

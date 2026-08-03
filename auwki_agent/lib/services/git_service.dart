@@ -69,6 +69,9 @@ class GitStatus {
 class GitService {
   static String? _repoRoot;
 
+  /// 仅供测试：清除仓库根缓存（应用运行时不需要调用）。
+  static void resetRepoRootCache() => _repoRoot = null;
+
   static Future<String?> repoRoot() async {
     if (_repoRoot != null) return _repoRoot;
     final r = await _run(['rev-parse', '--show-toplevel']);

@@ -6,10 +6,17 @@ import 'i18n/strings.dart';
 import 'pages/home_page.dart';
 import 'state/chat_store.dart';
 import 'state/round_changes_store.dart';
+import 'services/backup_service.dart';
+import 'services/log_service.dart';
 import 'services/settings_store.dart';
 import 'theme.dart';
+import 'widgets/onboarding_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  LogService.init();
+  BackupService.scheduleInitialBackup();
+  ErrorWidget.builder = (details) => _FriendlyError(details: details);
   runApp(const AuwkiAgentApp());
 }
 
@@ -78,7 +85,11 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
                 ),
               );
             },
-            home: const HomePage(),
+            home: !_settings.isReady
+                ? const _SplashScreen()
+                : _settings.hasSeenOnboarding
+                ? const HomePage()
+                : OnboardingScreen(settings: _settings),
           );
         },
       ),
@@ -117,6 +128,75 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
         selectionHandleColor: palette.primary,
       ),
       extensions: [palette],
+    );
+  }
+}
+
+/// 设置加载完成前的启动画面，避免首次引导闪一下。
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome, size: 44, color: AppColors.primary),
+            const SizedBox(height: 14),
+            Text(
+              I18n.t('app.title'),
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 友好的全局错误页（代替红屏报错）。
+class _FriendlyError extends StatelessWidget {
+  const _FriendlyError({required this.details});
+
+  final FlutterErrorDetails details;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF1E1E22),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.sentiment_neutral, color: Colors.orangeAccent),
+              const SizedBox(height: 12),
+              const Text(
+                'AUWKI Agent',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                I18n.t('stability.friendly_error'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

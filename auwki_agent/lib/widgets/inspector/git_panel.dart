@@ -4,7 +4,7 @@ import '../../i18n/strings.dart';
 import '../../services/git_service.dart';
 import '../../theme.dart';
 
-/// 右侧面板：Git（提交 / 回退 / 状态 / 历史）。
+/// 右侧面板：Git（提交 / 回退 / 状态 / 历史），带使用引导。
 class GitPanel extends StatefulWidget {
   const GitPanel({super.key, required this.accent});
 
@@ -20,6 +20,7 @@ class _GitPanelState extends State<GitPanel> {
   String? _error;
   bool _busy = false;
   bool _showLog = false;
+  bool _showGuide = true;
 
   @override
   void initState() {
@@ -66,7 +67,7 @@ class _GitPanelState extends State<GitPanel> {
     setState(() => _busy = true);
     try {
       final out = await op();
-      if (out.isNotEmpty) _snack(out);
+      if (out.isNotEmpty && !out.contains('nothing to commit')) _snack(out);
       await _refresh();
       if (okText.isNotEmpty) _snack(okText);
     } catch (e) {
@@ -92,6 +93,8 @@ class _GitPanelState extends State<GitPanel> {
       _run(() => GitService.stageAll(), I18n.t('git.staged_done'));
 
   Future<void> _commit() async {
+    final stagedCount =
+        _status?.files.where((f) => f.staged || f.untracked).length ?? 0;
     final controller = TextEditingController();
     final message = await showDialog<String>(
       context: context,
@@ -103,21 +106,35 @@ class _GitPanelState extends State<GitPanel> {
         ),
         content: SizedBox(
           width: 320,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: I18n.t('git.commit.hint'),
-              hintStyle: TextStyle(color: AppColors.textTertiary),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: AppColors.border),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                I18n.t('git.commit.staged_hint', {'count': '$stagedCount'}),
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
               ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: AppColors.primary),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 3,
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: I18n.t('git.commit.hint'),
+                  hintStyle: TextStyle(color: AppColors.textTertiary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.primary),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
         actions: [
@@ -251,36 +268,7 @@ class _GitPanelState extends State<GitPanel> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, color: Colors.redAccent, size: 28),
-              const SizedBox(height: 10),
-              Text(
-                I18n.t('git.no_repo'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12.5,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: _refresh,
-                icon: Icon(Icons.refresh, size: 16, color: widget.accent),
-                label: Text(
-                  I18n.t('git.refresh'),
-                  style: TextStyle(color: widget.accent, fontSize: 12.5),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _ErrorState(onRetry: _refresh);
     }
 
     final status = _status;
@@ -288,140 +276,69 @@ class _GitPanelState extends State<GitPanel> {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     final files = status?.files ?? const <GitFileStatus>[];
+    final stagedCount = files.where((f) => f.staged || f.untracked).length;
+    final trackedCount = files.where((f) => !f.untracked).length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_busy) const LinearProgressIndicator(minHeight: 2),
-        Row(
-          children: [
-            Icon(Icons.alt_route, size: 16, color: widget.accent),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                status?.branch ?? 'git',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            if ((status?.aheadBehind ?? '').isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Text(
-                  status!.aheadBehind,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              onPressed: _busy ? null : _refresh,
-              icon: Icon(Icons.refresh, size: 15, color: AppColors.textSecondary),
-              tooltip: I18n.t('git.refresh'),
-            ),
-          ],
+        _HeaderRow(
+          branch: status?.branch ?? 'git',
+          aheadBehind: status?.aheadBehind ?? '',
+          accent: widget.accent,
+          onRefresh: _busy ? null : _refresh,
         ),
+        if (_showGuide) ...[
+          const SizedBox(height: 8),
+          _GuideCard(
+            onClose: () => setState(() => _showGuide = false),
+          ),
+        ],
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _ActionChip(
-              icon: Icons.add_to_queue_outlined,
-              label: I18n.t('git.stage_all'),
-              accent: widget.accent,
-              onTap: _busy ? null : _stageAll,
-            ),
-            _ActionChip(
-              icon: Icons.commit_outlined,
-              label: I18n.t('git.commit'),
-              accent: widget.accent,
-              onTap: _busy ? null : _commit,
-            ),
-            _ActionChip(
-              icon: Icons.undo,
-              label: I18n.t('git.revert_menu'),
-              accent: Colors.redAccent,
-              onTap: _busy
-                  ? null
-                  : () => showMenu<String>(
-                        context: context,
-                        position: RelativeRect.fromLTRB(80, 70, 0, 0),
-                        color: AppColors.surfaceAlt,
-                        items: [
-                          PopupMenuItem(
-                            value: 'discard_all',
-                            child: Text(
-                              I18n.t('git.discard_all'),
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'revert_last',
-                            child: Text(
-                              I18n.t('git.revert_last'),
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ).then((v) {
-                        if (v == 'discard_all') _discardAll();
-                        if (v == 'revert_last' && _commits.isNotEmpty) {
-                          _revertCommit(_commits.first);
-                        }
-                      }),
-            ),
-          ],
+        _SummaryRow(
+          changes: files.length,
+          staged: stagedCount,
+          accent: widget.accent,
         ),
+        const SizedBox(height: 6),
+        const _LegendRow(),
         const SizedBox(height: 8),
         Expanded(
           child: files.isEmpty
-              ? Center(
-                  child: Text(
-                    I18n.t('git.no_changes'),
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
-                  ),
-                )
+              ? _EmptyState()
               : ListView.separated(
                   padding: EdgeInsets.zero,
                   itemCount: files.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 4),
-                  itemBuilder: (context, i) =>
-                      _FileRow(
-                        file: files[i],
-                        accent: widget.accent,
-                        onToggle: _busy ? null : () => _toggleStage(files[i]),
-                        onDiscard: _busy ? null : () => _discardFile(files[i]),
-                        onStat: _busy ? null : () => _showDiffStat(files[i]),
-                      ),
+                  itemBuilder: (context, i) => _FileRow(
+                    file: files[i],
+                    accent: widget.accent,
+                    onToggle: _busy ? null : () => _toggleStage(files[i]),
+                    onDiscard: _busy ? null : () => _discardFile(files[i]),
+                    onStat: _busy ? null : () => _showDiffStat(files[i]),
+                  ),
                 ),
+        ),
+        const SizedBox(height: 8),
+        _ActionBar(
+          stagedCount: stagedCount,
+          trackedCount: trackedCount,
+          accent: widget.accent,
+          busy: _busy,
+          onStageAll: _stageAll,
+          onCommit: _commit,
+          onRevertMenu: () => _showRevertMenu(),
         ),
         const SizedBox(height: 6),
         InkWell(
           onTap: () => setState(() => _showLog = !_showLog),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 5),
             child: Row(
               children: [
                 Icon(
-                  _showLog
-                      ? Icons.expand_less
-                      : Icons.expand_more,
+                  _showLog ? Icons.expand_less : Icons.expand_more,
                   size: 15,
                   color: AppColors.textSecondary,
                 ),
@@ -441,62 +358,425 @@ class _GitPanelState extends State<GitPanel> {
         if (_showLog)
           Flexible(
             flex: 2,
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: _commits.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, i) => _CommitRow(
-                commit: _commits[i],
-                accent: widget.accent,
-                onRevert: _busy ? null : () => _revertCommit(_commits[i]),
+            child: _commits.isEmpty
+                ? Center(
+                    child: Text(
+                      I18n.t('git.no_changes'),
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: _commits.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, i) => _CommitRow(
+                      commit: _commits[i],
+                      accent: widget.accent,
+                      onRevert: _busy ? null : () => _revertCommit(_commits[i]),
+                    ),
+                  ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _showRevertMenu() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                Icons.restore,
+                color: Colors.redAccent,
+              ),
+              title: Text(
+                I18n.t('git.discard_all'),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              ),
+              subtitle: Text(
+                I18n.t('git.discard_all.desc'),
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
+              onTap: () => Navigator.pop(ctx, 'discard_all'),
+            ),
+            ListTile(
+              leading: Icon(Icons.undo, color: Colors.redAccent),
+              title: Text(
+                I18n.t('git.revert_last'),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              ),
+              subtitle: Text(
+                I18n.t('git.revert_last.desc'),
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
+              onTap: () => Navigator.pop(ctx, 'revert_last'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'discard_all') {
+      await _discardAll();
+    } else if (action == 'revert_last' && _commits.isNotEmpty) {
+      await _revertCommit(_commits.first);
+    }
+  }
+}
+
+class _HeaderRow extends StatelessWidget {
+  const _HeaderRow({
+    required this.branch,
+    required this.aheadBehind,
+    required this.accent,
+    required this.onRefresh,
+  });
+
+  final String branch;
+  final String aheadBehind;
+  final Color accent;
+  final VoidCallback? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.alt_route, size: 13, color: accent),
+              const SizedBox(width: 4),
+              Text(
+                branch,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (aheadBehind.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Text(
+              aheadBehind,
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 10.5,
               ),
             ),
+          ),
+        const Spacer(),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          onPressed: onRefresh,
+          icon: Icon(Icons.refresh, size: 15, color: AppColors.textSecondary),
+          tooltip: I18n.t('git.refresh'),
+        ),
+      ],
+    );
+  }
+}
+
+class _GuideCard extends StatelessWidget {
+  const _GuideCard({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.help_outline,
+            size: 15,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  I18n.t('git.guide.title'),
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  I18n.t('git.guide.body'),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 10.5,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: onClose,
+            icon: Icon(
+              Icons.close,
+              size: 14,
+              color: AppColors.textTertiary,
+            ),
+            tooltip: I18n.t('git.guide.close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({
+    required this.changes,
+    required this.staged,
+    required this.accent,
+  });
+
+  final int changes;
+  final int staged;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          I18n.t('git.summary', {
+            'changes': '$changes',
+            'staged': '$staged',
+          }),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (I18n.t('git.legend.modified'), const Color(0xFF42A5F5)),
+      (I18n.t('git.legend.added'), const Color(0xFF66BB6A)),
+      (I18n.t('git.legend.deleted'), Colors.redAccent),
+      (I18n.t('git.legend.untracked'), Colors.orangeAccent),
+    ];
+    return Wrap(
+      spacing: 10,
+      runSpacing: 3,
+      children: [
+        for (final (label, color) in items)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+            ],
           ),
       ],
     );
   }
 }
 
-class _ActionChip extends StatelessWidget {
-  const _ActionChip({
+class _EmptyState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.task_alt,
+            size: 26,
+            color: AppColors.textTertiary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            I18n.t('git.no_changes'),
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            I18n.t('git.empty_hint'),
+            style: TextStyle(color: AppColors.textTertiary, fontSize: 10.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.stagedCount,
+    required this.trackedCount,
+    required this.accent,
+    required this.busy,
+    required this.onStageAll,
+    required this.onCommit,
+    required this.onRevertMenu,
+  });
+
+  final int stagedCount;
+  final int trackedCount;
+  final Color accent;
+  final bool busy;
+  final VoidCallback onStageAll;
+  final VoidCallback onCommit;
+  final VoidCallback onRevertMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _MiniButton(
+            icon: Icons.add_to_queue_outlined,
+            label: I18n.t('git.stage_all'),
+            color: accent,
+            onTap: busy ? null : onStageAll,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _MiniButton(
+            icon: Icons.commit_outlined,
+            label: I18n.t('git.commit.with_count', {'count': '$stagedCount'}),
+            color: accent,
+            filled: true,
+            onTap: busy ? null : onCommit,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _MiniButton(
+            icon: Icons.undo,
+            label: I18n.t('git.revert_menu'),
+            color: Colors.redAccent,
+            onTap: busy ? null : onRevertMenu,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniButton extends StatelessWidget {
+  const _MiniButton({
     required this.icon,
     required this.label,
-    required this.accent,
+    required this.color,
     required this.onTap,
+    this.filled = false,
   });
 
   final IconData icon;
   final String label;
-  final Color accent;
+  final Color color;
   final VoidCallback? onTap;
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return Material(
-      color: AppColors.surfaceAlt,
+      color: filled
+          ? (enabled ? color : AppColors.surfaceAlt)
+          : AppColors.surfaceAlt,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(
+              color: filled
+                  ? (enabled ? color : AppColors.border)
+                  : color.withValues(alpha: 0.45),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: onTap == null ? AppColors.textTertiary : accent),
+              Icon(
+                icon,
+                size: 13,
+                color: enabled
+                    ? (filled ? Colors.white : color)
+                    : AppColors.textTertiary,
+              ),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: onTap == null
-                      ? AppColors.textTertiary
-                      : AppColors.textPrimary,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: enabled
+                        ? (filled ? Colors.white : AppColors.textPrimary)
+                        : AppColors.textTertiary,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -522,12 +802,22 @@ class _FileRow extends StatelessWidget {
   final VoidCallback? onDiscard;
   final VoidCallback? onStat;
 
+  ({String label, Color color}) get _badge {
+    final s = file.label;
+    if (s.contains('A')) return (label: I18n.t('git.legend.added'), color: const Color(0xFF66BB6A));
+    if (s.contains('D')) return (label: I18n.t('git.legend.deleted'), color: Colors.redAccent);
+    if (s.contains('R')) return (label: 'R', color: const Color(0xFFAB47BC));
+    if (s.contains('U')) return (label: 'U', color: Colors.redAccent);
+    if (file.untracked) return (label: I18n.t('git.legend.untracked'), color: Colors.orangeAccent);
+    return (label: I18n.t('git.legend.modified'), color: const Color(0xFF42A5F5));
+  }
+
   @override
   Widget build(BuildContext context) {
     final staged = file.staged;
-    final label = file.label;
+    final badge = _badge;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
       decoration: BoxDecoration(
         color: staged ? accent.withValues(alpha: 0.08) : AppColors.surfaceAlt,
         borderRadius: BorderRadius.circular(8),
@@ -540,32 +830,29 @@ class _FileRow extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(2),
               child: Icon(
-                staged
-                    ? Icons.check_box
-                    : file.untracked
-                    ? Icons.check_box_outline_blank
-                    : Icons.check_box_outline_blank,
+                staged ? Icons.check_box : Icons.check_box_outline_blank,
                 size: 16,
                 color: staged ? accent : AppColors.textTertiary,
               ),
             ),
           ),
           const SizedBox(width: 6),
-          SizedBox(
-            width: 30,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: badge.color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
             child: Text(
-              label.isEmpty ? '..' : label,
+              badge.label,
               style: TextStyle(
-                color: file.untracked
-                    ? Colors.orangeAccent
-                    : file.deleted
-                    ? Colors.redAccent
-                    : accent,
-                fontSize: 11,
+                color: badge.color,
+                fontSize: 9.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
               file.path,
@@ -573,7 +860,7 @@ class _FileRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 11.5,
+                fontSize: 11,
                 fontFamily: 'monospace',
               ),
             ),
@@ -581,7 +868,11 @@ class _FileRow extends StatelessWidget {
           IconButton(
             visualDensity: VisualDensity.compact,
             onPressed: onStat,
-            icon: Icon(Icons.bar_chart, size: 14, color: AppColors.textSecondary),
+            icon: Icon(
+              Icons.bar_chart,
+              size: 14,
+              color: AppColors.textSecondary,
+            ),
             tooltip: I18n.t('git.diff_stat'),
           ),
           IconButton(
@@ -615,6 +906,8 @@ class _CommitRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
+          Icon(Icons.circle, size: 7, color: accent),
+          const SizedBox(width: 6),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -648,6 +941,46 @@ class _CommitRow extends StatelessWidget {
             tooltip: I18n.t('git.revert_commit'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, color: Colors.redAccent, size: 28),
+            const SizedBox(height: 10),
+            Text(
+              I18n.t('git.no_repo'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: Text(
+                I18n.t('git.refresh'),
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

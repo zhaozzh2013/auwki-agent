@@ -26,6 +26,7 @@ class SettingsStore extends ChangeNotifier {
   bool _enterToSend = true;
   CostMode _costMode = CostMode.medium;
   bool _showRoundChanges = true;
+  bool _hasSeenOnboarding = false;
 
   bool _ready = false;
   bool get isReady => _ready;
@@ -40,6 +41,7 @@ class SettingsStore extends ChangeNotifier {
   bool get enterToSend => _enterToSend;
   CostMode get costMode => _costMode;
   bool get showRoundChanges => _showRoundChanges;
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
 
   AiClient get client =>
       AiClient(config: _provider.withBaseUrl(_baseUrl), apiKey: _apiKey);
@@ -92,6 +94,7 @@ class SettingsStore extends ChangeNotifier {
         }
         _showRoundChanges = (m['showRoundChanges'] as bool?) ??
             _showRoundChanges;
+        _hasSeenOnboarding = (m['onboardingSeen'] as bool?) ?? false;
       }
     } catch (_) {}
     _ready = true;
@@ -181,5 +184,18 @@ class SettingsStore extends ChangeNotifier {
     _showRoundChanges = value;
     notifyListeners();
     await _save({'showRoundChanges': value});
+  }
+
+  Future<void> setOnboardingSeen() async {
+    if (_hasSeenOnboarding) return;
+    _hasSeenOnboarding = true;
+    notifyListeners();
+    await _save({'onboardingSeen': true});
+  }
+
+  Future<void> resetOnboarding() async {
+    _hasSeenOnboarding = false;
+    notifyListeners();
+    await _save({'onboardingSeen': false});
   }
 }

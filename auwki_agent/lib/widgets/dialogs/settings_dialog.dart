@@ -1,8 +1,10 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../app_state.dart';
 import '../../i18n/strings.dart';
 import '../../services/ai_providers.dart';
+import '../../services/backup_service.dart';
 import '../../services/settings_store.dart';
 import '../../theme.dart';
 
@@ -236,6 +238,71 @@ class _SettingsFormState extends State<_SettingsForm> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+            _label(I18n.t('settings.data_safety')),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    I18n.t('settings.data_safety.desc'),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DataButton(
+                          icon: Icons.backup_outlined,
+                          label: I18n.t('settings.backup_now'),
+                          onTap: _createBackup,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _DataButton(
+                          icon: Icons.file_download_outlined,
+                          label: I18n.t('settings.export_data'),
+                          onTap: _exportData,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _DataButton(
+                          icon: Icons.school_outlined,
+                          label: I18n.t('settings.show_onboarding'),
+                          onTap: _reshowOnboarding,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<String?>(
+                    future: BackupService.latestBackupTime(),
+                    builder: (context, snap) => Text(
+                      I18n.t('settings.last_backup', {
+                        'time':
+                            snap.data ?? I18n.t('settings.last_backup.none'),
+                      }),
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -274,6 +341,80 @@ class _SettingsFormState extends State<_SettingsForm> {
       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
     ),
   );
+
+  Future<void> _createBackup() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = await BackupService.createBackup();
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              I18n.t('settings.backup_done', {'path': path}),
+              style: const TextStyle(fontSize: 12),
+            ),
+            backgroundColor: AppColors.surfaceAlt,
+          ),
+        );
+      if (mounted) setState(() {});
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              I18n.t('settings.backup_failed', {'error': '$e'}),
+              style: const TextStyle(fontSize: 12),
+            ),
+            backgroundColor: Colors.redAccent.shade700,
+          ),
+        );
+    }
+  }
+
+  Future<void> _exportData() async {
+    final path = await FilePicker.saveFile(
+      dialogTitle: I18n.t('settings.export_data'),
+      fileName: 'auwki-backup-${DateTime.now().millisecondsSinceEpoch}.json',
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+    );
+    if (path == null) return;
+    try {
+      await BackupService.exportTo(path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              I18n.t('settings.export_done', {'path': path}),
+              style: const TextStyle(fontSize: 12),
+            ),
+            backgroundColor: AppColors.surfaceAlt,
+          ),
+        );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              I18n.t('settings.backup_failed', {'error': '$e'}),
+              style: const TextStyle(fontSize: 12),
+            ),
+            backgroundColor: Colors.redAccent.shade700,
+          ),
+        );
+    }
+  }
+
+  Future<void> _reshowOnboarding() async {
+    await widget.settings.resetOnboarding();
+    if (mounted) Navigator.of(context).pop();
+  }
 
   Widget _segRow({
     required List<(String, String)> options,
@@ -317,6 +458,55 @@ class _SettingsFormState extends State<_SettingsForm> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _DataButton extends StatelessWidget {
+  const _DataButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: AppColors.primary),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

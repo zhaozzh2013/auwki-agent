@@ -19,3 +19,10 @@ Thumbs.db
 # Misc
 *.log
 *.tmp
+
+# AUWKI 本地杂项（不纳入版本库）
+dist/
+auwki_agent/$err
+auwki_agent/$out
+auwki_agent/test.txt
+auwki_agent/complex_python_project/
