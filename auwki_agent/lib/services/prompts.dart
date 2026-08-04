@@ -434,6 +434,7 @@ Available agents:
     required WorkMode mode,
     required ThinkingLevel thinking,
     CostMode costMode = CostMode.medium,
+    String? workspaceDir,
   }) {
     final isEnglish = I18n.locale.value.languageCode == 'en';
     final buf = StringBuffer(isEnglish ? _baseEn : _base);
@@ -443,7 +444,32 @@ Available agents:
     buf.write((isEnglish ? workModeEn : workMode)[mode] ?? '');
     buf.write('\n');
     buf.write((isEnglish ? thinkingMapEn : thinkingMap)[thinking] ?? '');
+    if (workspaceDir != null && workspaceDir.trim().isNotEmpty) {
+      buf.write('\n');
+      buf.write(_workspacePrompt(workspaceDir.trim(), isEnglish: isEnglish));
+    }
     return buf.toString();
+  }
+
+  static String _workspacePrompt(String path, {required bool isEnglish}) {
+    if (isEnglish) {
+      return '''
+## Working Directory
+The current conversation's working directory is:
+$path
+- All relative paths in listfiles/readfile/writefile/replacefile/command are relative to this directory
+- Absolute paths must stay inside this directory unless the user explicitly asks otherwise
+- Do not pollute the directory with unrelated files
+''';
+    }
+    return '''
+## 工作目录
+当前对话的工作目录是：
+$path
+- listfiles / readfile / writefile / replacefile / command 中的相对路径都基于该目录
+- 绝对路径必须位于该工作目录内，除非用户明确要求
+- 不要在该目录外创建无关文件
+''';
   }
 
   static String _costPrompt(CostMode mode, {required bool isEnglish}) {

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -7,6 +8,7 @@ import '../app_state.dart';
 import '../i18n/strings.dart';
 import '../models/models.dart';
 import '../services/settings_store.dart';
+import '../services/workspace_manager.dart';
 import '../state/chat_store.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
@@ -31,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   ThinkingLevel _thinking = ThinkingLevel.thinking;
   _ActiveIdListenable? _activeListenable;
   ChatStore? _store;
+  String? _workspaceDir;
 
   String? _greeting;
   String? _greetingForConvId;
@@ -126,8 +129,11 @@ class _HomePageState extends State<HomePage> {
                   accentSoft: _accentSoft,
                   mode: _mode,
                   thinking: _thinking,
+                  workspaceDir: _workspaceDir,
                   onModeChanged: (m) => setState(() => _mode = m),
                   onThinkingChanged: (t) => setState(() => _thinking = t),
+                  onWorkspaceChanged: (v) =>
+                      setState(() => _workspaceDir = v),
                   greeting: greeting,
                 );
               }
@@ -144,8 +150,11 @@ class _HomePageState extends State<HomePage> {
                   accentSoft: _accentSoft,
                   mode: _mode,
                   thinking: _thinking,
+                  workspaceDir: _workspaceDir,
                   onModeChanged: (m) => setState(() => _mode = m),
                   onThinkingChanged: (t) => setState(() => _thinking = t),
+                  onWorkspaceChanged: (v) =>
+                      setState(() => _workspaceDir = v),
                   greeting: greeting,
                 );
               }
@@ -345,6 +354,7 @@ class _InspectorPanelState extends State<_InspectorPanel> {
                     mode: widget.mode,
                     thinking: widget.thinking,
                     messages: messages,
+                    workspaceDir: conv?.workspaceDir,
                     toolMessages: toolMessages,
                     runningTools: runningTools,
                     agents: agents,
@@ -353,7 +363,10 @@ class _InspectorPanelState extends State<_InspectorPanel> {
                   ),
                   1 => RoundChangesPanel(accent: widget.accent),
                   2 => BrowserPanel(accent: widget.accent),
-                  _ => GitPanel(accent: widget.accent),
+                  _ => GitPanel(
+                    accent: widget.accent,
+                    workspacePath: conv?.workspaceDir,
+                  ),
                 },
               ),
             ],
@@ -447,6 +460,7 @@ class _OverviewTab extends StatelessWidget {
     required this.mode,
     required this.thinking,
     required this.messages,
+    required this.workspaceDir,
     required this.toolMessages,
     required this.runningTools,
     required this.agents,
@@ -457,6 +471,7 @@ class _OverviewTab extends StatelessWidget {
   final WorkMode mode;
   final ThinkingLevel thinking;
   final List<Message> messages;
+  final String? workspaceDir;
   final List<Message> toolMessages;
   final List<Message> runningTools;
   final List<Message> agents;
@@ -480,6 +495,9 @@ class _OverviewTab extends StatelessWidget {
               I18n.t('inspector.messages'),
               '${messages.length}',
             ),
+            if (workspaceDir != null && workspaceDir!.trim().isNotEmpty) ...[
+              _InspectorRow(I18n.t('inspector.workspace'), workspaceDir!),
+            ],
           ],
         ),
         const SizedBox(height: 10),
@@ -571,6 +589,9 @@ class _InspectorRow extends StatelessWidget {
           ),
           Text(
             value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 12,
@@ -631,8 +652,10 @@ class _EmptyHome extends StatelessWidget {
     required this.accentSoft,
     required this.mode,
     required this.thinking,
+    required this.workspaceDir,
     required this.onModeChanged,
     required this.onThinkingChanged,
+    required this.onWorkspaceChanged,
     required this.greeting,
   });
 
@@ -640,8 +663,10 @@ class _EmptyHome extends StatelessWidget {
   final Color accentSoft;
   final WorkMode mode;
   final ThinkingLevel thinking;
+  final String? workspaceDir;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
+  final ValueChanged<String?> onWorkspaceChanged;
   final String greeting;
 
   @override
@@ -649,26 +674,44 @@ class _EmptyHome extends StatelessWidget {
     return Container(
       color: AppColors.bg,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            children: [
-              const Spacer(flex: 1),
-              _HeroTitle(text: greeting, accent: accent),
-              const SizedBox(height: 24),
-              _OnboardingCard(accent: accent),
-              const SizedBox(height: 14),
-              ControlsCard(
-                mode: mode,
-                thinking: thinking,
-                accent: accent,
-                accentSoft: accentSoft,
-                onModeChanged: onModeChanged,
-                onThinkingChanged: onThinkingChanged,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 20,
               ),
-              const Spacer(flex: 2),
-            ],
-          ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 40,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _HeroTitle(text: greeting, accent: accent),
+                    const SizedBox(height: 20),
+                    _OnboardingCard(accent: accent),
+                    const SizedBox(height: 12),
+                    _WorkspaceCard(
+                      workspaceDir: workspaceDir,
+                      accent: accent,
+                      onChanged: onWorkspaceChanged,
+                    ),
+                    const SizedBox(height: 12),
+                    ControlsCard(
+                      mode: mode,
+                      thinking: thinking,
+                      accent: accent,
+                      accentSoft: accentSoft,
+                      workspaceDir: workspaceDir,
+                      onModeChanged: onModeChanged,
+                      onThinkingChanged: onThinkingChanged,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -779,6 +822,108 @@ class _OnboardingStep extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkspaceCard extends StatelessWidget {
+  const _WorkspaceCard({
+    required this.workspaceDir,
+    required this.accent,
+    required this.onChanged,
+  });
+
+  final String? workspaceDir;
+  final Color accent;
+  final ValueChanged<String?> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final dir = await FilePicker.getDirectoryPath();
+    if (dir == null || dir.trim().isEmpty) return;
+    onChanged(dir.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final custom = workspaceDir != null && workspaceDir!.trim().isNotEmpty;
+    return Container(
+      width: 760,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: custom
+              ? accent.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.folder_outlined, color: accent, size: 17),
+              const SizedBox(width: 8),
+              Text(
+                I18n.t('home.workspace.title'),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => _pick(context),
+                child: Text(
+                  I18n.t('home.workspace.pick'),
+                  style: TextStyle(color: accent, fontSize: 12),
+                ),
+              ),
+              if (custom) ...[
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: () => onChanged(null),
+                  child: Text(
+                    I18n.t('home.workspace.reset'),
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            custom
+                ? workspaceDir!
+                : I18n.t('home.workspace.none'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: custom ? AppColors.textPrimary : AppColors.textTertiary,
+              fontSize: 11.5,
+              fontFamily: custom ? 'monospace' : null,
+            ),
+          ),
+          if (!custom) ...[
+            const SizedBox(height: 4),
+            Text(
+              I18n.t('home.workspace.default_hint', {
+                'base': WorkspaceManager.appBaseDirectory,
+              }),
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 10.5,
+                height: 1.4,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -923,6 +1068,7 @@ class _ChatViewState extends State<ChatView> {
                 onModeChanged: widget.onModeChanged,
                 onThinkingChanged: widget.onThinkingChanged,
                 conversationId: conv.id,
+                workspaceDir: conv.workspaceDir,
               ),
             ),
           ],
@@ -1455,6 +1601,7 @@ class ControlsCard extends StatelessWidget {
     required this.thinking,
     required this.accent,
     required this.accentSoft,
+    this.workspaceDir,
     required this.onModeChanged,
     required this.onThinkingChanged,
     this.conversationId,
@@ -1464,6 +1611,7 @@ class ControlsCard extends StatelessWidget {
   final ThinkingLevel thinking;
   final Color accent;
   final Color accentSoft;
+  final String? workspaceDir;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
   final String? conversationId;
@@ -1501,6 +1649,7 @@ class ControlsCard extends StatelessWidget {
             accent: accent,
             accentSoft: accentSoft,
             conversationId: conversationId,
+            workspaceDir: workspaceDir,
             onModeChanged: onModeChanged,
           ),
         ],

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../i18n/strings.dart';
 import '../models/models.dart';
+import '../services/workspace_manager.dart';
 
 class ChatStore extends ChangeNotifier {
   ChatStore() {
@@ -114,10 +115,12 @@ class ChatStore extends ChangeNotifier {
     }
   }
 
-  String newConversation() {
+  String newConversation({String? workspaceDir}) {
+    final id = 'c_${DateTime.now().microsecondsSinceEpoch}';
     final c = Conversation(
-      id: 'c_${DateTime.now().microsecondsSinceEpoch}',
+      id: id,
       title: I18n.t('chat.empty'),
+      workspaceDir: workspaceDir ?? WorkspaceManager.defaultWorkspacePath(id),
     );
     _conversations.insert(0, c);
     _activeId = c.id;

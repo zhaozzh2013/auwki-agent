@@ -632,16 +632,19 @@ ${agent.instruction}
     return buf.toString().trim();
   }
 
-  static Future<AgentResult> execute(AgentToolCall call) async {
+  static Future<AgentResult> execute(
+    AgentToolCall call, {
+    String? cwd,
+  }) async {
     try {
       final out = switch (call.tool) {
         'webfetch' => await _webfetch(call.args),
         'websearch' => await _websearch(call.args),
-        'listfiles' => await _listfiles(call.args),
-        'readfile' => await _readfile(call.args),
-        'writefile' => await _writefile(call.args),
-        'replacefile' => await _replacefile(call.args),
-        'command' => await _command(call.args),
+        'listfiles' => await _listfiles(call.args, cwd),
+        'readfile' => await _readfile(call.args, cwd),
+        'writefile' => await _writefile(call.args, cwd),
+        'replacefile' => await _replacefile(call.args, cwd),
+        'command' => await _command(call.args, cwd),
         _ => throw Exception(
           I18n.t('agent.error.unknown_tool', {'tool': call.tool}),
         ),
@@ -719,13 +722,17 @@ ${agent.instruction}
     return I18n.t('agent.error.searx_unavailable');
   }
 
-  static Future<String> _command(String cmd) async {
+  static Future<String> _command(String cmd, String? cwd) async {
     final safetyIssue = _validateCommand(cmd);
     if (safetyIssue != null) return safetyIssue;
 
     late final Process process;
     try {
-      process = await Process.start('bash', ['-c', cmd]);
+      process = await Process.start(
+        'bash',
+        ['-c', cmd],
+        workingDirectory: cwd,
+      );
     } catch (e) {
       return '${I18n.t('agent.error.command_start_failed')}\n$e';
     }
@@ -763,8 +770,8 @@ ${agent.instruction}
         : out;
   }
 
-  static Future<String> _listfiles(String path) async {
-    final dir = Directory(path.trim().isEmpty ? '.' : path.trim());
+  static Future<String> _listfiles(String path, String? cwd) async {
+    final dir = Directory(_resolvePath(path, cwd));
     if (!await dir.exists()) {
       return I18n.t('agent.error.dir_missing', {'path': dir.path});
     }
@@ -785,8 +792,8 @@ ${agent.instruction}
         : '${entries.join('\n')}$truncated';
   }
 
-  static Future<String> _readfile(String path) async {
-    final file = File(path.trim());
+  static Future<String> _readfile(String path, String? cwd) async {
+    final file = File(_resolvePath(path, cwd));
     if (!await file.exists()) {
       return I18n.t('agent.error.file_missing', {'path': file.path});
     }
@@ -810,11 +817,11 @@ ${agent.instruction}
         : numbered;
   }
 
-  static Future<String> _writefile(String arg) async {
+  static Future<String> _writefile(String arg, String? cwd) async {
     final parts = _splitToolArg(arg, 2);
     if (parts == null) return I18n.t('agent.error.write_args');
-    final file = File(parts[0].trim());
-    final safetyIssue = _validateWritePath(file.path);
+    final file = File(_resolvePath(parts[0], cwd));
+    final safetyIssue = _validateWritePath(file.path, cwd);
     if (safetyIssue != null) return safetyIssue;
     if (await file.exists()) {
       return I18n.t('agent.error.file_exists', {'path': file.path});
@@ -825,11 +832,11 @@ ${agent.instruction}
     return I18n.t('agent.done.write', {'path': file.path});
   }
 
-  static Future<String> _replacefile(String arg) async {
+  static Future<String> _replacefile(String arg, String? cwd) async {
     final parts = _splitToolArg(arg, 3);
     if (parts == null) return I18n.t('agent.error.replace_args');
-    final file = File(parts[0].trim());
-    final safetyIssue = _validateWritePath(file.path);
+    final file = File(_resolvePath(parts[0], cwd));
+    final safetyIssue = _validateWritePath(file.path, cwd);
     if (safetyIssue != null) return safetyIssue;
 
     if (!await file.exists()) {
@@ -859,6 +866,17 @@ ${agent.instruction}
       .replaceAll(r'\"', '"')
       .replaceAll(r'\\', '\\');
 
+  /// 把模型给出的路径解析到工作目录下；空路径表示工作目录本身。
+  static String _resolvePath(String path, String? cwd) {
+    final p = path.trim().replaceAll('\\', '/');
+    if (p.isEmpty) return (cwd ?? Directory.current.path).replaceAll('\\', '/');
+    final isAbsolute =
+        p.startsWith('/') || RegExp(r'^[A-Za-z]:/').hasMatch(p);
+    if (isAbsolute) return p;
+    final base = (cwd ?? Directory.current.path).replaceAll('\\', '/');
+    return '$base/$p';
+  }
+
   static String? _validateCommand(String cmd) {
     final normalized = cmd.trim().toLowerCase();
     final blocked = <RegExp>[
@@ -876,10 +894,10 @@ ${agent.instruction}
     return null;
   }
 
-  static String? _validateWritePath(String path) {
+  static String? _validateWritePath(String path, String? cwd) {
     final normalized = path.trim();
     if (normalized.isEmpty) return I18n.t('agent.error.empty_path');
-    if (_isUnsafePath(normalized)) {
+    if (_isUnsafePath(normalized, cwd)) {
       return I18n.t('agent.error.path_blocked', {'path': path});
     }
     final lower = normalized.toLowerCase();
@@ -896,17 +914,28 @@ ${agent.instruction}
     return null;
   }
 
-  static bool _isUnsafePath(String path) {
+  static bool _isUnsafePath(String path, String? cwd) {
     final normalized = path.replaceAll('\\', '/');
     if (normalized.contains('/../') || normalized == '..') return true;
-    final absolute = normalized.startsWith('/');
+    final absolute =
+        normalized.startsWith('/') || RegExp(r'^[A-Za-z]:/').hasMatch(normalized);
     if (!absolute) return false;
     final allowedPrefixes = [
-      Directory.current.path.replaceAll('\\', '/'),
+      (cwd ?? Directory.current.path).replaceAll('\\', '/'),
       '/tmp/',
       '${Platform.environment['HOME'] ?? ''}/'.replaceAll('\\', '/'),
     ].where((p) => p.isNotEmpty).toList();
-    return !allowedPrefixes.any(normalized.startsWith);
+    final target = Platform.isWindows ? normalized.toLowerCase() : normalized;
+    final prefixes = Platform.isWindows
+        ? allowedPrefixes.map((p) => p.toLowerCase()).toList()
+        : allowedPrefixes;
+    bool within(String prefix) {
+      if (target == prefix) return true;
+      final withSlash = prefix.endsWith('/') ? prefix : '$prefix/';
+      return target.startsWith(withSlash);
+    }
+
+    return !prefixes.any(within);
   }
 }
 

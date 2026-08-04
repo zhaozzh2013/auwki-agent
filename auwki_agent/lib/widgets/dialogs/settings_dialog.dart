@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../app_state.dart';
 import '../../i18n/strings.dart';
 import '../../services/ai_providers.dart';
+import '../../services/app_restarter.dart';
 import '../../services/backup_service.dart';
 import '../../services/settings_store.dart';
 import '../../theme.dart';
@@ -180,8 +183,9 @@ class _SettingsFormState extends State<_SettingsForm> {
                 ('light', I18n.t('settings.theme.light')),
               ],
               current: s.theme.name,
-              onSelect: (v) =>
-                  s.setTheme(AppTheme.values.firstWhere((t) => t.name == v)),
+              onSelect: (v) => _onThemeSelected(
+                AppTheme.values.firstWhere((t) => t.name == v),
+              ),
             ),
             const SizedBox(height: 16),
             _label(I18n.t('settings.enter_to_send')),
@@ -341,6 +345,20 @@ class _SettingsFormState extends State<_SettingsForm> {
       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
     ),
   );
+
+  Future<void> _onThemeSelected(AppTheme theme) async {
+    if (theme == widget.settings.theme) return;
+    await widget.settings.setTheme(theme);
+    if (!mounted) return;
+    final restart = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _ThemeRestartDialog(),
+    );
+    if (restart == true && mounted) {
+      await AppRestarter.restart();
+    }
+  }
 
   Future<void> _createBackup() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -508,6 +526,81 @@ class _DataButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 主题切换后的重启提示：3 秒倒计时，超时或点击“立即重启”都会重启应用。
+class _ThemeRestartDialog extends StatefulWidget {
+  const _ThemeRestartDialog();
+
+  @override
+  State<_ThemeRestartDialog> createState() => _ThemeRestartDialogState();
+}
+
+class _ThemeRestartDialogState extends State<_ThemeRestartDialog> {
+  static const int _timeoutSeconds = 3;
+
+  Timer? _timer;
+  int _left = _timeoutSeconds;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _left--);
+      if (_left <= 0) _restartNow();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _restartNow() {
+    _timer?.cancel();
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Row(
+        children: [
+          Icon(Icons.restart_alt, color: AppColors.primary, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            I18n.t('settings.theme.restart.title'),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+          ),
+        ],
+      ),
+      content: Text(
+        I18n.t('settings.theme.restart.body', {'n': '$_left'}),
+        style: TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 13,
+          height: 1.5,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(
+            I18n.t('settings.theme.restart.later'),
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+        FilledButton(
+          onPressed: _restartNow,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+          child: Text(I18n.t('settings.theme.restart.now')),
+        ),
+      ],
     );
   }
 }

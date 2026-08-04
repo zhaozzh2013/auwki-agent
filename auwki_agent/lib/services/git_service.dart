@@ -67,26 +67,39 @@ class GitStatus {
 /// 只提供安全操作：暂存、提交、放弃工作区更改、revert 提交；
 /// 不使用 `reset --hard` 等破坏性命令。
 class GitService {
-  static String? _repoRoot;
+  static final Map<String, String?> _repoRootCache = {};
 
   /// 仅供测试：清除仓库根缓存（应用运行时不需要调用）。
-  static void resetRepoRootCache() => _repoRoot = null;
+  static void resetRepoRootCache() => _repoRootCache.clear();
 
-  static Future<String?> repoRoot() async {
-    if (_repoRoot != null) return _repoRoot;
-    final r = await _run(['rev-parse', '--show-toplevel']);
+  static String _pathKey(String? path) {
+    final p = path?.trim();
+    return (p == null || p.isEmpty) ? Directory.current.path : p;
+  }
+
+  static Future<String?> repoRoot({String? path}) async {
+    final key = _pathKey(path);
+    if (_repoRootCache.containsKey(key)) return _repoRootCache[key];
+    final r = await _run(
+      ['rev-parse', '--show-toplevel'],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) return null;
     final root = (r.stdout as String).trim();
     if (root.isEmpty) return null;
-    _repoRoot = root;
+    _repoRootCache[key] = root;
     return root;
   }
 
-  static Future<ProcessResult> _run(List<String> args) async {
+  static Future<ProcessResult> _run(
+    List<String> args, {
+    String? workingDirectory,
+  }) async {
     try {
       return await Process.run(
         'git',
         ['-c', 'core.quotepath=false', ...args],
+        workingDirectory: workingDirectory,
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -95,8 +108,11 @@ class GitService {
     }
   }
 
-  static Future<GitStatus> status() async {
-    final r = await _run(['status', '--porcelain=v1', '-b']);
+  static Future<GitStatus> status({String? path}) async {
+    final r = await _run(
+      ['status', '--porcelain=v1', '-b'],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) {
       throw GitServiceException(r.stderr.trim().isEmpty
           ? 'git unavailable'
@@ -139,14 +155,20 @@ class GitService {
     return GitStatus(branch: branch, files: files, aheadBehind: aheadBehind);
   }
 
-  static Future<List<GitCommitInfo>> log({int count = 15}) async {
-    final r = await _run([
-      'log',
-      '-n',
-      '$count',
-      '--pretty=format:%H|%h|%an|%ad|%s',
-      '--date=format:%Y-%m-%d %H:%M',
-    ]);
+  static Future<List<GitCommitInfo>> log({
+    int count = 15,
+    String? path,
+  }) async {
+    final r = await _run(
+      [
+        'log',
+        '-n',
+        '$count',
+        '--pretty=format:%H|%h|%an|%ad|%s',
+        '--date=format:%Y-%m-%d %H:%M',
+      ],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) {
       throw GitServiceException(r.stderr.trim());
     }
@@ -167,62 +189,92 @@ class GitService {
     return commits;
   }
 
-  static Future<String> stage(List<String> paths) async {
-    final r = await _run(['add', '--', ...paths]);
+  static Future<String> stage(List<String> paths, {String? path}) async {
+    final r = await _run(['add', '--', ...paths], workingDirectory: path);
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
-  static Future<String> stageAll() async {
-    final r = await _run(['add', '-A']);
+  static Future<String> stageAll({String? path}) async {
+    final r = await _run(['add', '-A'], workingDirectory: path);
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
-  static Future<String> unstage(List<String> paths) async {
-    final r = await _run(['restore', '--staged', '--', ...paths]);
+  static Future<String> unstage(List<String> paths, {String? path}) async {
+    final r = await _run(
+      ['restore', '--staged', '--', ...paths],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
-  static Future<String> commit(String message) async {
-    final r = await _run(['commit', '-m', message]);
+  static Future<String> commit(String message, {String? path}) async {
+    final r = await _run(['commit', '-m', message], workingDirectory: path);
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
   /// 放弃指定文件的工作区更改（保留暂存区）。
-  static Future<String> discard(List<String> paths) async {
-    final r = await _run(['restore', '--', ...paths]);
+  static Future<String> discard(List<String> paths, {String? path}) async {
+    final r = await _run(
+      ['restore', '--', ...paths],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
   /// 放弃所有工作区更改（保留暂存区与历史）。
-  static Future<String> discardAll() async {
-    final r = await _run(['restore', '--', '.']);
+  static Future<String> discardAll({String? path}) async {
+    final r = await _run(['restore', '--', '.'], workingDirectory: path);
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
   /// 删除未跟踪文件（谨慎使用，仅限用户明确选择的路径）。
-  static Future<String> removeUntracked(List<String> paths) async {
-    final r = await _run(['clean', '-fd', '--', ...paths]);
+  static Future<String> removeUntracked(
+    List<String> paths, {
+    String? path,
+  }) async {
+    final r = await _run(
+      ['clean', '-fd', '--', ...paths],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
   /// 用一次新提交回滚指定提交（安全，不改写历史）。
-  static Future<String> revertCommit(String hash) async {
-    final r = await _run(['revert', '--no-edit', hash]);
+  static Future<String> revertCommit(String hash, {String? path}) async {
+    final r = await _run(
+      ['revert', '--no-edit', hash],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
     return r.stdout.trim();
   }
 
   /// 文件相对工作区的 diff 统计（含暂存区与未暂存更改）。
-  static Future<String> diffStat(String path) async {
-    final r = await _run(['diff', 'HEAD', '--stat', '--', path]);
+  static Future<String> diffStat(String file, {String? path}) async {
+    final r = await _run(
+      ['diff', 'HEAD', '--stat', '--', file],
+      workingDirectory: path,
+    );
     if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
+    return r.stdout.trim();
+  }
+
+  /// 初始化仓库（目录不存在会自动创建）。
+  static Future<String> initRepo(String path) async {
+    final dir = Directory(path);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final r = await _run(['init'], workingDirectory: path);
+    if (r.exitCode != 0) throw GitServiceException(r.stderr.trim());
+    _repoRootCache.remove(_pathKey(path));
     return r.stdout.trim();
   }
 }

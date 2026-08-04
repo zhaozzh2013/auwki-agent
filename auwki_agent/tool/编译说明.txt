@@ -1,0 +1,39 @@
+AUWKI Agent 编译脚本（给朋友版）
+================================
+
+这个脚本可以让朋友在【不安装 Flutter】的情况下帮你编译 Windows 版。
+只需要电脑上有网络，最好有 Visual Studio C++ 工具链。
+
+【发给朋友之前】
+把整个项目文件夹发给他（脚本在 auwki_agent\tool 里），
+或者只把 tool 文件夹发给他——脚本会自动从 GitHub 下载源码。
+（注意：GitHub 源码里可能还没有最新改动，建议连同项目一起发。）
+
+【朋友怎么用】
+方式一：双击 build_for_friend.bat，按提示操作。
+方式二：在脚本所在文件夹打开 PowerShell，运行：
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\build_for_friend.ps1
+
+【第一次运行会发生什么】
+1. 自动下载便携版 Flutter SDK（约 1GB，只下载到本地 tools 文件夹，
+   不会安装到系统，也不会改 PATH）。
+2. 检查 Visual Studio C++ 工具链：
+   - 已安装：直接继续；
+   - 未安装：脚本会提示，可加参数自动安装：
+       powershell -NoProfile -ExecutionPolicy Bypass -File .\build_for_friend.ps1 -InstallBuildTools
+     （自动安装的是免费的 Visual Studio Build Tools，不是 Flutter；
+      体积较大，需要管理员权限，耗时较长。）
+3. 在纯英文临时路径里编译，避开中文用户名导致的 MSBuild 乱码问题。
+4. 编译完成后输出：
+   项目目录\dist\friend_build\AUWKI-Agent-windows-x64.zip
+
+【注意事项】
+- 全程需要联网；国内网络会自动使用 flutter-io.cn 镜像。
+- 如果下载源码失败，把项目文件夹放到脚本旁边再运行即可。
+- 如果提示找不到纯英文路径，把整个项目复制到如 D:\build\auwki 再运行。
+- 编译大约需要 5-15 分钟（首次下载 SDK 另计）。
+
+【参数一览】
+-FlutterVersion 3.44.8    指定 Flutter 版本（默认 3.44.8）
+-InstallBuildTools        缺少 VS 工具链时自动安装（需管理员）
+-OutputDir "D:\out"       自定义输出目录

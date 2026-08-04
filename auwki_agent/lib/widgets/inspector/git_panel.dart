@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../i18n/strings.dart';
@@ -6,9 +8,12 @@ import '../../theme.dart';
 
 /// 右侧面板：Git（提交 / 回退 / 状态 / 历史），带使用引导。
 class GitPanel extends StatefulWidget {
-  const GitPanel({super.key, required this.accent});
+  const GitPanel({super.key, required this.accent, this.workspacePath});
 
   final Color accent;
+
+  /// 本次 Git 操作的工作目录；为 null 时使用应用启动目录。
+  final String? workspacePath;
 
   @override
   State<GitPanel> createState() => _GitPanelState();
@@ -21,6 +26,7 @@ class _GitPanelState extends State<GitPanel> {
   bool _busy = false;
   bool _showLog = false;
   bool _showGuide = true;
+  bool _isRepo = true;
 
   @override
   void initState() {
@@ -34,10 +40,24 @@ class _GitPanelState extends State<GitPanel> {
       _error = null;
     });
     try {
-      final status = await GitService.status();
-      final commits = await GitService.log(count: 15);
+      final root = await GitService.repoRoot(path: widget.workspacePath);
+      if (!mounted) return;
+      if (root == null) {
+        setState(() {
+          _isRepo = false;
+          _status = null;
+          _commits = const [];
+        });
+        return;
+      }
+      final status = await GitService.status(path: widget.workspacePath);
+      final commits = await GitService.log(
+        count: 15,
+        path: widget.workspacePath,
+      );
       if (!mounted) return;
       setState(() {
+        _isRepo = true;
         _status = status;
         _commits = commits;
       });
@@ -79,18 +99,29 @@ class _GitPanelState extends State<GitPanel> {
 
   Future<void> _toggleStage(GitFileStatus f) async {
     if (f.untracked) {
-      await _run(() => GitService.stage([f.path]), '');
+      await _run(
+        () => GitService.stage([f.path], path: widget.workspacePath),
+        '',
+      );
       return;
     }
     if (f.staged) {
-      await _run(() => GitService.unstage([f.path]), '');
+      await _run(
+        () => GitService.unstage([f.path], path: widget.workspacePath),
+        '',
+      );
     } else {
-      await _run(() => GitService.stage([f.path]), '');
+      await _run(
+        () => GitService.stage([f.path], path: widget.workspacePath),
+        '',
+      );
     }
   }
 
-  Future<void> _stageAll() =>
-      _run(() => GitService.stageAll(), I18n.t('git.staged_done'));
+  Future<void> _stageAll() => _run(
+    () => GitService.stageAll(path: widget.workspacePath),
+    I18n.t('git.staged_done'),
+  );
 
   Future<void> _commit() async {
     final stagedCount =
@@ -157,7 +188,10 @@ class _GitPanelState extends State<GitPanel> {
     );
     controller.dispose();
     if (message == null || message.isEmpty) return;
-    await _run(() => GitService.commit(message), I18n.t('git.commit.done'));
+    await _run(
+      () => GitService.commit(message, path: widget.workspacePath),
+      I18n.t('git.commit.done'),
+    );
   }
 
   Future<bool> _confirm(String body) async {
@@ -205,15 +239,21 @@ class _GitPanelState extends State<GitPanel> {
     if (!await _confirm(body)) return;
     await _run(
       () => f.untracked
-          ? GitService.removeUntracked([f.path])
-          : GitService.discard([f.path]),
+          ? GitService.removeUntracked(
+              [f.path],
+              path: widget.workspacePath,
+            )
+          : GitService.discard([f.path], path: widget.workspacePath),
       '',
     );
   }
 
   Future<void> _discardAll() async {
     if (!await _confirm(I18n.t('git.discard_all.confirm'))) return;
-    await _run(() => GitService.discardAll(), '');
+    await _run(
+      () => GitService.discardAll(path: widget.workspacePath),
+      '',
+    );
   }
 
   Future<void> _revertCommit(GitCommitInfo c) async {
@@ -221,7 +261,7 @@ class _GitPanelState extends State<GitPanel> {
       return;
     }
     await _run(
-      () => GitService.revertCommit(c.hash),
+      () => GitService.revertCommit(c.hash, path: widget.workspacePath),
       I18n.t('git.revert.done'),
     );
   }
@@ -229,7 +269,10 @@ class _GitPanelState extends State<GitPanel> {
   Future<void> _showDiffStat(GitFileStatus f) async {
     String text;
     try {
-      text = await GitService.diffStat(f.path);
+      text = await GitService.diffStat(
+        f.path,
+        path: widget.workspacePath,
+      );
     } catch (e) {
       text = '$e';
     }
@@ -265,10 +308,32 @@ class _GitPanelState extends State<GitPanel> {
     );
   }
 
+  Future<void> _initRepo() async {
+    final path = widget.workspacePath ?? Directory.current.path;
+    setState(() => _busy = true);
+    try {
+      await GitService.initRepo(path);
+      _snack(I18n.t('git.init.done'));
+      await _refresh();
+    } catch (e) {
+      _snack('${I18n.t('git.error')}: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
       return _ErrorState(onRetry: _refresh);
+    }
+
+    if (!_isRepo && !_busy) {
+      return _NoRepoState(
+        path: widget.workspacePath ?? Directory.current.path,
+        onInit: _initRepo,
+        onRefresh: _refresh,
+      );
     }
 
     final status = _status;
@@ -977,6 +1042,95 @@ class _ErrorState extends StatelessWidget {
               label: Text(
                 I18n.t('git.refresh'),
                 style: const TextStyle(fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoRepoState extends StatelessWidget {
+  const _NoRepoState({
+    required this.path,
+    required this.onInit,
+    required this.onRefresh,
+  });
+
+  final String path;
+  final VoidCallback onInit;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_off_outlined, color: AppColors.textSecondary, size: 30),
+            const SizedBox(height: 10),
+            Text(
+              I18n.t('git.init.title'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              I18n.t('git.init.body'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                path,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 10.5,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onInit,
+              icon: const Icon(Icons.create_new_folder_outlined, size: 16),
+              label: Text(
+                I18n.t('git.init.action'),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            TextButton.icon(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh, size: 15),
+              label: Text(
+                I18n.t('git.refresh'),
+                style: const TextStyle(fontSize: 12),
               ),
             ),
           ],

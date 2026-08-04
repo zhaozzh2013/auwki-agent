@@ -115,6 +115,7 @@ class Conversation {
     required this.id,
     required this.title,
     this.folderId,
+    this.workspaceDir,
     this.pinned = false,
     this.unread = false,
     List<Message>? messages,
@@ -125,6 +126,10 @@ class Conversation {
   final String id;
   String title;
   String? folderId;
+
+  /// 本对话的工作空间目录；为 null 时表示沿用应用启动目录（旧数据兼容）。
+  String? workspaceDir;
+
   bool pinned;
   bool unread;
   List<Message> messages;
@@ -134,6 +139,7 @@ class Conversation {
     id: (json['id'] ?? '').toString(),
     title: (json['title'] ?? '').toString(),
     folderId: json['folderId']?.toString(),
+    workspaceDir: json['workspaceDir']?.toString(),
     pinned: json['pinned'] as bool? ?? false,
     unread: json['unread'] as bool? ?? false,
     messages: ((json['messages'] as List?) ?? const [])
@@ -147,6 +153,7 @@ class Conversation {
     'id': id,
     'title': title,
     'folderId': folderId,
+    'workspaceDir': workspaceDir,
     'pinned': pinned,
     'unread': unread,
     'messages': messages.map((m) => m.toJson()).toList(),

@@ -14,6 +14,7 @@ import '../services/ai_providers.dart';
 import '../services/prompts.dart';
 import '../services/round_changes.dart';
 import '../services/settings_store.dart';
+import '../services/workspace_manager.dart';
 import '../state/chat_store.dart';
 import '../state/round_changes_store.dart';
 import '../theme.dart';
@@ -29,6 +30,7 @@ class ChatInput extends StatefulWidget {
     this.accent,
     this.accentSoft,
     this.conversationId,
+    this.workspaceDir,
     this.onModeChanged,
   });
 
@@ -37,6 +39,10 @@ class ChatInput extends StatefulWidget {
   final Color? accent;
   final Color? accentSoft;
   final String? conversationId;
+
+  /// 新建对话时使用的工作空间目录；已有对话时传入对话已保存的目录。
+  final String? workspaceDir;
+
   final ValueChanged<WorkMode>? onModeChanged;
 
   @override
@@ -139,7 +145,7 @@ class _ChatInputState extends State<ChatInput> {
     final store = AppState.chatOf(context);
     final convId = widget.conversationId;
     if (convId == null) {
-      final id = store.newConversation();
+      final id = store.newConversation(workspaceDir: widget.workspaceDir);
       store.activate(id);
       _sendTo(store, id, attachments: [attach]);
     } else {
@@ -186,7 +192,9 @@ class _ChatInputState extends State<ChatInput> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
-    final convId = widget.conversationId ?? store.newConversation();
+    final convId =
+        widget.conversationId ??
+        store.newConversation(workspaceDir: widget.workspaceDir);
     if (widget.conversationId == null) store.activate(convId);
 
     if (_handleSlashCommand(store, convId, text)) {
@@ -195,6 +203,22 @@ class _ChatInputState extends State<ChatInput> {
     }
 
     final effectiveText = _expandSlashPrompt(text);
+
+    // 解析对话工作目录（新建对话时从 store 中取回最终路径），并确保目录存在。
+    String? workspace;
+    for (final c in store.conversations) {
+      if (c.id == convId) {
+        workspace = c.workspaceDir;
+        break;
+      }
+    }
+    if (workspace != null && workspace.trim().isNotEmpty) {
+      try {
+        await WorkspaceManager.ensure(workspace);
+      } catch (_) {
+        // 目录创建失败不阻塞对话，工具调用会自己报错。
+      }
+    }
 
     if (settings.apiKey.isEmpty) {
       _sendTo(
@@ -229,7 +253,7 @@ class _ChatInputState extends State<ChatInput> {
     final fileActions = <String, Set<String>>{};
     if (settings.showRoundChanges) {
       try {
-        beforeSnapshot = await WorkspaceSnapshot.capture();
+        beforeSnapshot = await WorkspaceSnapshot.capture(rootPath: workspace);
       } catch (_) {
         beforeSnapshot = null;
       }
@@ -265,6 +289,7 @@ class _ChatInputState extends State<ChatInput> {
         mode: widget.mode,
         thinking: widget.thinking,
         costMode: settings.costMode,
+        workspaceDir: workspace,
       );
       final isEnglish = I18n.locale.value.languageCode == 'en';
       final maxFlagshipRounds = switch (settings.costMode) {
@@ -586,13 +611,16 @@ class _ChatInputState extends State<ChatInput> {
               toolRunning: true,
             ),
           );
-          final r = await _executeCall(call);
+          final r = await _executeCall(call, cwd: workspace);
           results.add(r);
           if (r.ok &&
               (call.tool == 'writefile' || call.tool == 'replacefile')) {
             final parts = call.args.split('|||');
             if (parts.isNotEmpty) {
-              final key = WorkspaceSnapshot.normalizePath(parts.first.trim());
+              final key = WorkspaceSnapshot.normalizePath(
+                parts.first.trim(),
+                base: workspace,
+              );
               fileActions
                   .putIfAbsent(key, () => <String>{})
                   .add(call.tool == 'writefile' ? 'created' : 'modified');
@@ -633,6 +661,7 @@ class _ChatInputState extends State<ChatInput> {
           beforeSnapshot,
           fileActions,
           roundChanges,
+          workspace,
         );
       }
     } catch (e) {
@@ -680,15 +709,17 @@ class _ChatInputState extends State<ChatInput> {
     WorkspaceSnapshot? before,
     Map<String, Set<String>> fileActions,
     RoundChangesStore roundChanges,
+    String? workspace,
   ) async {
     try {
       final lines = <String>[];
       if (before != null) {
-        final after = await WorkspaceSnapshot.capture();
+        final after = await WorkspaceSnapshot.capture(rootPath: workspace);
         final changes = before.diff(after);
         for (final change in changes) {
           change.actions.addAll(
-            fileActions[WorkspaceSnapshot.normalizePath(change.path)] ??
+            fileActions[
+                WorkspaceSnapshot.normalizePath(change.path, base: workspace)] ??
                 const <String>{},
           );
           if (change.deleted) {
@@ -888,8 +919,13 @@ class _ChatInputState extends State<ChatInput> {
     return controller.stream;
   }
 
-  Future<AgentResult> _executeCall(AgentToolCall call) async {
-    if (call.tool != 'command') return AgentRunner.execute(call);
+  Future<AgentResult> _executeCall(
+    AgentToolCall call, {
+    String? cwd,
+  }) async {
+    if (call.tool != 'command') {
+      return AgentRunner.execute(call, cwd: cwd);
+    }
     if (!mounted) {
       // 组件已卸载时无法弹确认框，按“拒绝执行”处理，而不是静默放行。
       return AgentResult(
@@ -962,7 +998,7 @@ class _ChatInputState extends State<ChatInput> {
         error: I18n.t('agent.error.command_cancelled', {'command': call.args}),
       );
     }
-    return AgentRunner.execute(call);
+    return AgentRunner.execute(call, cwd: cwd);
   }
 
   bool _handleSlashCommand(ChatStore store, String convId, String text) {

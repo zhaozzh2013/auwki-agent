@@ -80,4 +80,21 @@ void main() {
     final log2 = await GitService.log(count: 5);
     expect(log2.length, log.length + 1);
   });
+
+  test('initRepo 在非仓库目录创建仓库', () async {
+    if (!await gitAvailable) return;
+    final target = Directory.systemTemp.createTempSync('git_init_target');
+    addTearDown(() {
+      if (target.existsSync()) target.deleteSync(recursive: true);
+    });
+
+    final before = await GitService.repoRoot(path: target.path);
+    expect(before, isNull);
+
+    await GitService.initRepo(target.path);
+    final after = await GitService.repoRoot(path: target.path);
+    expect(after, isNotNull);
+    final st = await GitService.status(path: target.path);
+    expect(st.branch, isNotNull);
+  });
 }
