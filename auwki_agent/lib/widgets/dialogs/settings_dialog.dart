@@ -120,22 +120,34 @@ class _SettingsFormState extends State<_SettingsForm> {
               },
             ),
             const SizedBox(height: 16),
-            _label(I18n.t('settings.base_url')),
-            TextField(
-              controller: _baseUrl,
-              cursorColor: AppColors.primary,
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: s.provider.baseUrl,
-                hintStyle: TextStyle(color: AppColors.textTertiary),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.primary),
+            if (s.provider.kind == ProviderKind.custom) ...[
+              _label(I18n.t('settings.custom_provider.base_url')),
+              Text(
+                s.provider.baseUrl,
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
                 ),
               ),
-            ),
+            ] else ...[
+              _label(I18n.t('settings.base_url')),
+              TextField(
+                controller: _baseUrl,
+                cursorColor: AppColors.primary,
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: s.provider.baseUrl,
+                  hintStyle: TextStyle(color: AppColors.textTertiary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.primary),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             _label('API Key'),
             TextField(
@@ -228,10 +240,7 @@ class _SettingsFormState extends State<_SettingsForm> {
               current:
                   '${I18n.locale.value.languageCode}_${I18n.locale.value.countryCode ?? ''}',
               onSelect: (code) {
-                final parts = code.split('_');
-                s.setLocale(
-                  Locale(parts[0], parts.length > 1 ? parts[1] : null),
-                );
+                _onLocaleSelected(code);
               },
             ),
             const SizedBox(height: 16),
@@ -423,7 +432,29 @@ class _SettingsFormState extends State<_SettingsForm> {
     final restart = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const _ThemeRestartDialog(),
+      builder: (_) => const _RestartPromptDialog(
+        titleKey: 'settings.theme.restart.title',
+        bodyKey: 'settings.theme.restart.body',
+      ),
+    );
+    if (restart == true && mounted) {
+      await AppRestarter.restart();
+    }
+  }
+
+  Future<void> _onLocaleSelected(String code) async {
+    final parts = code.split('_');
+    final loc = Locale(parts[0], parts.length > 1 ? parts[1] : null);
+    if (loc == I18n.locale.value) return;
+    await widget.settings.setLocale(loc);
+    if (!mounted) return;
+    final restart = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _RestartPromptDialog(
+        titleKey: 'settings.language.restart.title',
+        bodyKey: 'settings.language.restart.body',
+      ),
     );
     if (restart == true && mounted) {
       await AppRestarter.restart();
@@ -569,9 +600,6 @@ class _SettingsFormState extends State<_SettingsForm> {
             .toList(),
       );
     }
-    name.dispose();
-    base.dispose();
-    models.dispose();
   }
 
   Future<void> _createBackup() async {
@@ -744,15 +772,21 @@ class _DataButton extends StatelessWidget {
   }
 }
 
-/// 主题切换后的重启提示：3 秒倒计时，超时或点击“立即重启”都会重启应用。
-class _ThemeRestartDialog extends StatefulWidget {
-  const _ThemeRestartDialog();
+/// 设置项切换后的重启提示：3 秒倒计时，超时或点击“立即重启”都会重启应用。
+class _RestartPromptDialog extends StatefulWidget {
+  const _RestartPromptDialog({
+    required this.titleKey,
+    required this.bodyKey,
+  });
+
+  final String titleKey;
+  final String bodyKey;
 
   @override
-  State<_ThemeRestartDialog> createState() => _ThemeRestartDialogState();
+  State<_RestartPromptDialog> createState() => _RestartPromptDialogState();
 }
 
-class _ThemeRestartDialogState extends State<_ThemeRestartDialog> {
+class _RestartPromptDialogState extends State<_RestartPromptDialog> {
   static const int _timeoutSeconds = 3;
 
   Timer? _timer;
@@ -788,13 +822,13 @@ class _ThemeRestartDialogState extends State<_ThemeRestartDialog> {
           Icon(Icons.restart_alt, color: AppColors.primary, size: 20),
           const SizedBox(width: 8),
           Text(
-            I18n.t('settings.theme.restart.title'),
+            I18n.t(widget.titleKey),
             style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
           ),
         ],
       ),
       content: Text(
-        I18n.t('settings.theme.restart.body', {'n': '$_left'}),
+        I18n.t(widget.bodyKey, {'n': '$_left'}),
         style: TextStyle(
           color: AppColors.textSecondary,
           fontSize: 13,
@@ -805,14 +839,14 @@ class _ThemeRestartDialogState extends State<_ThemeRestartDialog> {
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
           child: Text(
-            I18n.t('settings.theme.restart.later'),
+            I18n.t('settings.restart.later'),
             style: TextStyle(color: AppColors.textSecondary),
           ),
         ),
         FilledButton(
           onPressed: _restartNow,
           style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-          child: Text(I18n.t('settings.theme.restart.now')),
+          child: Text(I18n.t('settings.restart.now')),
         ),
       ],
     );

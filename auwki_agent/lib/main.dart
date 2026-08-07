@@ -91,6 +91,9 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
           final palette = isDark ? AppPalette.dark : AppPalette.light;
           AppColors.palette = palette;
           return MaterialApp(
+            key: ValueKey(
+              '${_settings.theme.name}|${I18n.locale.value.languageCode}',
+            ),
             title: I18n.t('app.title'),
             debugShowCheckedModeBanner: false,
             theme: _buildTheme(isDark, palette),

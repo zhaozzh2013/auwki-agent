@@ -103,6 +103,13 @@ class _HomePageState extends State<HomePage> {
     _regenerateDraft.value = text;
   }
 
+  void _startTask(String prompt) {
+    final store = AppState.chatOf(context);
+    final id = store.newConversation(workspaceDir: _workspaceDir);
+    store.activate(id);
+    _regenerateDraft.value = prompt;
+  }
+
   void _openCommandPalette() {
     final store = AppState.chatOf(context);
     final settings = AppState.settingsOf(context);
@@ -112,10 +119,7 @@ class _HomePageState extends State<HomePage> {
         icon: Icons.add_comment_outlined,
         label: I18n.t('palette.new_chat'),
         keywords: ['new', 'chat', '对话'],
-        onTap: () {
-          final id = store.newConversation();
-          store.activate(id);
-        },
+        onTap: () => store.activate(null),
       ),
       PaletteAction(
         icon: Icons.settings_outlined,
@@ -246,10 +250,11 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-                  regenerateDraft: _regenerateDraft,
-                  greeting: greeting,
-                );
+              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+              regenerateDraft: _regenerateDraft,
+              onStartTask: _startTask,
+              greeting: greeting,
+            );
           }
           Conversation? conv;
           for (final c in store.conversations) {
@@ -267,10 +272,11 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-                  regenerateDraft: _regenerateDraft,
-                  greeting: greeting,
-                );
+              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+              regenerateDraft: _regenerateDraft,
+              onStartTask: _startTask,
+              greeting: greeting,
+            );
           }
           return ChatView(
             conversation: conv,
@@ -339,31 +345,41 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+          if (_inspectorOpen)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _inspectorOpen = false),
+                child: Container(color: Colors.black38),
+              ),
+            ),
           Positioned(
             right: 0,
             top: 0,
             bottom: 0,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, anim) => SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(1, 0),
-                  end: Offset.zero,
-                ).animate(anim),
-                child: FadeTransition(opacity: anim, child: child),
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width * 0.85,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, anim) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: _inspectorOpen
+                    ? Material(
+                        key: const ValueKey('inspector-open'),
+                        elevation: 12,
+                        color: AppColors.surface,
+                        child: inspector,
+                      )
+                    : const SizedBox.shrink(
+                        key: ValueKey('inspector-closed'),
+                      ),
               ),
-              child: _inspectorOpen
-                  ? Material(
-                      key: const ValueKey('inspector-open'),
-                      elevation: 12,
-                      color: AppColors.surface,
-                      child: inspector,
-                    )
-                  : const SizedBox.shrink(
-                      key: ValueKey('inspector-closed'),
-                    ),
             ),
           ),
         ],
@@ -787,15 +803,18 @@ class _InspectorRow extends StatelessWidget {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
-          Text(
-            value,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            flex: 2,
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -854,6 +873,7 @@ class _EmptyHome extends StatelessWidget {
     required this.thinking,
     required this.workspaceDir,
     required this.regenerateDraft,
+    required this.onStartTask,
     required this.onModeChanged,
     required this.onThinkingChanged,
     required this.onWorkspaceChanged,
@@ -866,6 +886,7 @@ class _EmptyHome extends StatelessWidget {
   final ThinkingLevel thinking;
   final String? workspaceDir;
   final ValueNotifier<String?> regenerateDraft;
+  final ValueChanged<String> onStartTask;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
   final ValueChanged<String?> onWorkspaceChanged;
@@ -898,6 +919,11 @@ class _EmptyHome extends StatelessWidget {
                       workspaceDir: workspaceDir,
                       accent: accent,
                       onChanged: onWorkspaceChanged,
+                    ),
+                    const SizedBox(height: 12),
+                    _RecommendCard(
+                      accent: accent,
+                      onStart: onStartTask,
                     ),
                     const SizedBox(height: 12),
                     ControlsCard(
@@ -1127,6 +1153,71 @@ class _WorkspaceCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendCard extends StatelessWidget {
+  const _RecommendCard({required this.accent, required this.onStart});
+
+  final Color accent;
+  final ValueChanged<String> onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final tasks = [
+      I18n.t('home.task.progress'),
+      I18n.t('home.task.snake'),
+      I18n.t('home.task.review'),
+      I18n.t('home.task.report'),
+    ];
+    return Container(
+      width: 760,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, color: accent, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                I18n.t('home.tasks.title'),
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final t in tasks)
+                ActionChip(
+                  label: Text(
+                    t,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  backgroundColor: AppColors.surfaceAlt,
+                  side: BorderSide(color: AppColors.border),
+                  onPressed: () => onStart(t),
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -1388,7 +1479,6 @@ class _MessageBubble extends StatelessWidget {
         ],
       ),
     );
-    controller.dispose();
     if (result != null && result.trim().isNotEmpty) {
       onEdit?.call(result.trim());
     }

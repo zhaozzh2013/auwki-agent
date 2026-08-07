@@ -177,8 +177,7 @@ class _SidebarState extends State<Sidebar> {
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: () {
-          final id = store.newConversation();
-          store.activate(id);
+          store.activate(null);
         },
         child: Container(
           height: 38,
@@ -380,8 +379,7 @@ class _SidebarState extends State<Sidebar> {
       await Future<void>.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
 
-      final id = store.newConversation();
-      store.activate(id);
+      store.activate(null);
     } else if (result == 2) {
       // 关键：不要在 PopupMenu 刚 pop 的同一帧里 showDialog
       await Future<void>.delayed(const Duration(milliseconds: 160));
@@ -460,8 +458,7 @@ class _SidebarState extends State<Sidebar> {
 
       store.addFolder(folderName);
     } finally {
-      controller.dispose();
-    }
+  }
   }
 
   void _showConvMenu(BuildContext context, Conversation c, Offset offset) {
@@ -586,7 +583,6 @@ class _SidebarState extends State<Sidebar> {
         },
       ),
     );
-    controller.dispose();
   }
 
   Future<void> _showFolderMenu(
