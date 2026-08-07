@@ -329,7 +329,7 @@ class _ChatInputState extends State<ChatInput> {
       };
 
       var turn = 0;
-      final maxTurns = 3;
+      final maxTurns = 4; // 工具轮次 + 至少一轮最终收尾
       var currentHistory = List<Map<String, dynamic>>.from(history);
 
       if (widget.thinking == ThinkingLevel.flagship &&
@@ -628,7 +628,8 @@ class _ChatInputState extends State<ChatInput> {
         );
       }
 
-      while (turn < maxTurns) {
+      // 工具轮次用完后仍保留一轮最终收尾，避免“执行完直接结束”。
+      while (turn < maxTurns + 1) {
         if (cancel.isCompleted) break;
         final req = ChatRequest(
           system: systemPrompt,
@@ -728,7 +729,7 @@ class _ChatInputState extends State<ChatInput> {
           }
           continue;
         }
-        if (calls.isEmpty || thinking == ThinkingLevel.fast) break;
+        if (calls.isEmpty) break;
 
         final results = <AgentResult>[];
         for (final call in calls) {
@@ -773,7 +774,7 @@ class _ChatInputState extends State<ChatInput> {
           'content': I18n.t('chat.tool_result_prompt', {'result': toolMsg}),
         });
         turn++;
-        if (turn < maxTurns) {
+        if (turn < maxTurns + 1) {
           // 下一轮回答另起一条助手消息，工具气泡保持在两轮之间的正确位置。
           placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
           store.addMessage(

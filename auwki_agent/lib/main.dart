@@ -150,6 +150,13 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
         selectionColor: palette.primary.withValues(alpha: 0.35),
         selectionHandleColor: palette.primary,
       ),
+      snackBarTheme: SnackBarThemeData(
+        contentTextStyle: TextStyle(
+          color: palette.textPrimary,
+          fontSize: 12,
+        ),
+        backgroundColor: palette.surfaceAlt,
+      ),
       extensions: [palette],
     );
   }

@@ -193,3 +193,28 @@ class AppColors {
   static Color get codeFg => _current.codeFg;
   static Color get codeblockBg => _current.codeblockBg;
 }
+
+/// 统一的底部提示条：文本颜色跟随主题，不再硬编码黑/白。
+void showAppSnack(
+  BuildContext context,
+  String text, {
+  bool error = false,
+}) {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(
+          text,
+          style: TextStyle(
+            color: error ? Colors.white : AppColors.textPrimary,
+            fontSize: 12,
+          ),
+        ),
+        backgroundColor: error
+            ? Colors.redAccent.shade700
+            : AppColors.surfaceAlt,
+      ),
+    );
+}
