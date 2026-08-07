@@ -226,7 +226,7 @@ MIT License —— 详见 [LICENSE](LICENSE) 文件。
 
 ## 🙏 致谢
 
-特别感谢 [Rank](https://github.com/) 为我们提供的 Linux 预编译包，大家有时间也可以给他的仓库 Fork 一下，这是对我们莫大的支持。
+特别感谢 [Rank](https://github.com/rankCH) 为我们提供的 Linux 预编译包，大家有时间也可以给他的仓库 Fork 一下，这是对我们莫大的支持。
 
 **AUWKI Agent** 的灵感来自这些项目：
 
