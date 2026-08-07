@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'app_state.dart';
 import 'i18n/strings.dart';
 import 'pages/home_page.dart';
+import 'pages/profile_page.dart';
 import 'state/chat_store.dart';
 import 'state/round_changes_store.dart';
 import 'services/backup_service.dart';
@@ -11,6 +12,7 @@ import 'services/log_service.dart';
 import 'services/settings_store.dart';
 import 'theme.dart';
 import 'widgets/onboarding_screen.dart';
+import 'widgets/dialogs/settings_dialog.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +55,21 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     }
     if (key == LogicalKeyboardKey.digit0 || key == LogicalKeyboardKey.numpad0) {
       setState(() => _zoom = 1.0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyN) {
+      final id = _store.newConversation();
+      _store.activate(id);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.comma) {
+      showSettingsDialog(context);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyP) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const ProfilePage()),
+      );
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

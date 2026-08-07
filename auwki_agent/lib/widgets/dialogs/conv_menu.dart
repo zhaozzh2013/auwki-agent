@@ -14,6 +14,7 @@ Future<void> showConvMenu({
   required VoidCallback onTogglePin,
   required VoidCallback onToggleUnread,
   required VoidCallback onDelete,
+  required VoidCallback onExport,
 }) async {
   final items = <PopupMenuEntry<int>>[
     PopupMenuItem(
@@ -51,6 +52,13 @@ Future<void> showConvMenu({
         ),
       ),
     const PopupMenuDivider(),
+    PopupMenuItem(
+      onTap: onExport,
+      child: _MenuRow(
+        icon: Icons.file_download_outlined,
+        label: I18n.t('conv.export'),
+      ),
+    ),
     PopupMenuItem(
       onTap: onDelete,
       child: _MenuRow(

@@ -89,6 +89,11 @@ class SettingsStore extends ChangeNotifier {
     return kProviders.first;
   }
 
+  bool _isKnownProviderId(String id) {
+    if (kProviders.any((p) => p.kind.name == id)) return true;
+    return _customProviders.any((m) => (m['id'] ?? '') == id);
+  }
+
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
     return File('${dir.path}/settings.json');
@@ -109,9 +114,12 @@ class SettingsStore extends ChangeNotifier {
                 .map((e) => Map<String, dynamic>.from(e)),
           );
         final pid = m['provider'] as String?;
-        if (pid != null && pid.isNotEmpty) {
+        if (pid != null && pid.isNotEmpty && _isKnownProviderId(pid)) {
           _provider = _resolveProvider(pid);
           _providerId = pid;
+        } else {
+          _provider = kProviders.first;
+          _providerId = kProviders.first.kind.name;
         }
         final mid = m['model'] as String?;
         if (mid != null && _provider.models.any((x) => x.id == mid)) {
@@ -171,8 +179,11 @@ class SettingsStore extends ChangeNotifier {
   }
 
   Future<void> setProvider(String id) async {
-    _provider = _resolveProvider(id);
-    _providerId = id;
+    final nextId = _isKnownProviderId(id)
+        ? id
+        : kProviders.first.kind.name;
+    _provider = _resolveProvider(nextId);
+    _providerId = nextId;
     if (!_provider.models.any((m) => m.id == _model)) {
       _model = _provider.defaultModel;
     }

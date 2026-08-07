@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +8,7 @@ import '../app_state.dart';
 import '../i18n/strings.dart';
 import '../models/models.dart';
 import '../pages/profile_page.dart';
+import '../services/export_service.dart';
 import '../state/chat_store.dart';
 import '../theme.dart';
 import 'dialogs/conv_menu.dart';
@@ -447,7 +451,51 @@ class _SidebarState extends State<Sidebar> {
       onTogglePin: () => store.togglePin(c.id),
       onToggleUnread: () => store.toggleUnread(c.id),
       onDelete: () => _deleteDialog(context, c),
+      onExport: () => _exportConversation(context, c),
     );
+  }
+
+  Future<void> _exportConversation(
+    BuildContext context,
+    Conversation c,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final md = ExportService.conversationToMarkdown(c);
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp = '${now.year}${two(now.month)}${two(now.day)}';
+    final safeTitle = c.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    try {
+      final path = await FilePicker.saveFile(
+        dialogTitle: I18n.t('conv.export'),
+        fileName: 'AUWKI-$safeTitle-$stamp.md',
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        bytes: utf8.encode(md),
+      );
+      if (path != null && path.isNotEmpty) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                I18n.t('conv.export.done', {'path': path}),
+                style: const TextStyle(fontSize: 12),
+              ),
+              backgroundColor: AppColors.surfaceAlt,
+            ),
+          );
+      }
+    } catch (_) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(I18n.t('conv.export.failed')),
+            backgroundColor: Colors.redAccent.shade700,
+          ),
+        );
+    }
   }
 
   Future<void> _showFolderMenu(

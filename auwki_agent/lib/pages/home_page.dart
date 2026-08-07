@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/services.dart';
 
 import '../app_state.dart';
 import '../i18n/strings.dart';
@@ -218,17 +219,33 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-          if (_inspectorOpen)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Material(
-                elevation: 12,
-                color: AppColors.surface,
-                child: inspector,
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 260),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, anim) => SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(1, 0),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: FadeTransition(opacity: anim, child: child),
               ),
+              child: _inspectorOpen
+                  ? Material(
+                      key: const ValueKey('inspector-open'),
+                      elevation: 12,
+                      color: AppColors.surface,
+                      child: inspector,
+                    )
+                  : const SizedBox.shrink(
+                      key: ValueKey('inspector-closed'),
+                    ),
             ),
+          ),
         ],
       );
     }
@@ -1097,7 +1114,16 @@ class _ChatViewState extends State<ChatView> {
                       switchInCurve: Curves.easeOut,
                       switchOutCurve: Curves.easeIn,
                       transitionBuilder: (child, anim) {
-                        return FadeTransition(opacity: anim, child: child);
+                        return FadeTransition(
+                          opacity: anim,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.06),
+                              end: Offset.zero,
+                            ).animate(anim),
+                            child: child,
+                          ),
+                        );
                       },
                       child: KeyedSubtree(
                         key: ValueKey(message.id),
@@ -1142,6 +1168,22 @@ class _MessageBubble extends StatelessWidget {
   final Color accent;
   final AppPalette palette;
 
+  void _copyMessage(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: message.text));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            I18n.t('conv.copy.done'),
+            style: const TextStyle(fontSize: 12),
+          ),
+          backgroundColor: AppColors.surfaceAlt,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (message.sender == Sender.tool &&
@@ -1169,13 +1211,31 @@ class _MessageBubble extends StatelessWidget {
                 ? CrossAxisAlignment.end
                 : CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: isUser ? accent : AppColors.textSecondary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isUser ? accent : AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => _copyMessage(context),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.copy,
+                        size: 11,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Container(

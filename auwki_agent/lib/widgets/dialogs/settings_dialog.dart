@@ -86,7 +86,9 @@ class _SettingsFormState extends State<_SettingsForm> {
           children: [
             _label(I18n.t('settings.provider')),
             DropdownButton<String>(
-              value: s.providerId,
+              value: s.providerChoices.any((c) => c.$1 == s.providerId)
+                  ? s.providerId
+                  : s.providerChoices.first.$1,
               isExpanded: true,
               dropdownColor: AppColors.surfaceAlt,
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
