@@ -928,9 +928,15 @@ ${agent.instruction}
     }
     buf.write('\n[exit $exitCode]');
     final out = buf.toString();
-    return out.length > 6000
-        ? '${out.substring(0, 6000)}\n${I18n.t('agent.truncated')}'
-        : out;
+    return out.length > 6000 ? _ellipsize(out, 6000) : out;
+  }
+
+  /// 长文本保留头尾，避免 AI 丢失关键上下文。
+  static String _ellipsize(String s, int max) {
+    if (s.length <= max) return s;
+    final head = s.substring(0, (max * 0.6).round());
+    final tail = s.substring(s.length - (max * 0.35).round());
+    return '$head\n…[中间省略 ${s.length - max} 字符]…\n$tail';
   }
 
   /// 跨平台命令解释器：Windows 用 PowerShell，macOS/Linux 用 /bin/sh。

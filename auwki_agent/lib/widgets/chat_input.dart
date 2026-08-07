@@ -640,7 +640,7 @@ class _ChatInputState extends State<ChatInput> {
         var lastVisible = '';
         await _collectStream(
           cancel,
-          client.chatStream(req),
+          _chatWithRetry(cancel, () => client.chatStream(req)),
           (chunk) {
             rawAcc.write(chunk);
             final visible = _stripToolBlocks(rawAcc.toString());
@@ -1057,6 +1057,32 @@ class _ChatInputState extends State<ChatInput> {
       _activeSubs.remove(sub);
     };
     return controller.stream;
+  }
+
+  /// 请求自动重试：网络类瞬时错误最多重试 3 次（1s / 2s 退避）。
+  Stream<String> _chatWithRetry(
+    Completer<void> cancel,
+    Stream<String> Function() request,
+  ) async* {
+    var attempts = 0;
+    while (true) {
+      attempts++;
+      try {
+        yield* _cancellable(request(), cancel);
+        return;
+      } catch (e) {
+        if (attempts >= 3 || cancel.isCompleted) rethrow;
+        final msg = e.toString();
+        final transient =
+            msg.contains('SocketException') ||
+            msg.contains('ClientException') ||
+            msg.contains('TimeoutException') ||
+            msg.contains('Connection reset') ||
+            msg.contains('连接');
+        if (!transient) rethrow;
+        await Future<void>.delayed(Duration(seconds: attempts * 2));
+      }
+    }
   }
 
   Future<AgentResult> _executeCall(

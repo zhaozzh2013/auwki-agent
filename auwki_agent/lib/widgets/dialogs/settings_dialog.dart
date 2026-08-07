@@ -7,6 +7,7 @@ import '../../app_state.dart';
 import '../../i18n/strings.dart';
 import '../../services/ai_providers.dart';
 import '../../services/app_restarter.dart';
+import '../../services/app_info.dart';
 import '../../services/backup_service.dart';
 import '../../services/settings_store.dart';
 import '../../theme.dart';
@@ -364,6 +365,16 @@ class _SettingsFormState extends State<_SettingsForm> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                '${AppInfo.title} ${AppInfo.version}',
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                ),
               ),
             ),
             const SizedBox(height: 24),
