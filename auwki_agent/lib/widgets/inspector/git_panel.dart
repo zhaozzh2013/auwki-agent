@@ -43,6 +43,12 @@ class _GitPanelState extends State<GitPanel> {
       final root = await GitService.repoRoot(path: widget.workspacePath);
       if (!mounted) return;
       if (root == null) {
+        final hasGit = await GitService.gitAvailable();
+        if (!mounted) return;
+        if (!hasGit) {
+          setState(() => _error = I18n.t('git.unavailable'));
+          return;
+        }
         setState(() {
           _isRepo = false;
           _status = null;
@@ -313,6 +319,15 @@ class _GitPanelState extends State<GitPanel> {
     setState(() => _busy = true);
     try {
       await GitService.initRepo(path);
+      GitService.resetRepoRootCache();
+      final root = await GitService.repoRoot(path: path);
+      if (root == null) {
+        _snack(
+          '${I18n.t('git.error')}: ${I18n.t('git.init.failed')}',
+          error: true,
+        );
+        return;
+      }
       _snack(I18n.t('git.init.done'));
       await _refresh();
     } catch (e) {

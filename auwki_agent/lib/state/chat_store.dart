@@ -33,10 +33,6 @@ class ChatStore extends ChangeNotifier {
   List<Conversation> get topLevel =>
       _conversations.where((c) => !c.pinned && c.folderId == null).toList();
 
-  /// 包含收藏消息的对话（用于侧边栏“收藏”区）。
-  List<Conversation> get starredConversations =>
-      _conversations.where((c) => c.messages.any((m) => m.starred)).toList();
-
   List<Conversation> inFolder(String folderId) =>
       _conversations.where((c) => c.folderId == folderId).toList();
 
@@ -325,29 +321,6 @@ class ChatStore extends ChangeNotifier {
     if (i < 0) return;
     c.messages.removeRange(i, c.messages.length);
     c.updatedAt = DateTime.now();
-    notifyListeners();
-    _scheduleSave();
-  }
-
-  void toggleStar(String convId, String msgId) {
-    final c = _byId(convId);
-    if (c == null) return;
-    final i = c.messages.indexWhere((m) => m.id == msgId);
-    if (i < 0) return;
-    final m = c.messages[i];
-    c.messages[i] = Message(
-      id: m.id,
-      sender: m.sender,
-      text: m.text,
-      attachments: m.attachments,
-      toolName: m.toolName,
-      toolArgs: m.toolArgs,
-      toolResult: m.toolResult,
-      toolOk: m.toolOk,
-      toolRunning: m.toolRunning,
-      starred: !m.starred,
-      createdAt: m.createdAt,
-    );
     notifyListeners();
     _scheduleSave();
   }

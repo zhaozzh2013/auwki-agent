@@ -41,7 +41,6 @@ class Message {
     this.toolResult,
     this.toolOk,
     this.toolRunning = false,
-    this.starred = false,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -55,7 +54,6 @@ class Message {
   final String? toolResult;
   final bool? toolOk;
   final bool toolRunning;
-  final bool starred;
 
   final DateTime createdAt;
 
@@ -75,7 +73,6 @@ class Message {
     toolResult: json['toolResult']?.toString(),
     toolOk: json['toolOk'] as bool?,
     toolRunning: json['toolRunning'] as bool? ?? false,
-    starred: json['starred'] as bool? ?? false,
     createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
   );
 
@@ -89,7 +86,6 @@ class Message {
     'toolResult': toolResult,
     'toolOk': toolOk,
     'toolRunning': toolRunning,
-    'starred': starred,
     'createdAt': createdAt.toIso8601String(),
   };
 }

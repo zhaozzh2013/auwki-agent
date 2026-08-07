@@ -210,30 +210,8 @@ class _SidebarState extends State<Sidebar> {
     final pinned = store.pinned;
     final topLevel = store.topLevel;
     final folders = store.folders;
-    final starred = store.starredConversations;
 
     final staticSlivers = <Widget>[
-      if (starred.isNotEmpty) ...[
-        SliverToBoxAdapter(
-          child: _SectionHeader(label: I18n.t('sidebar.section.starred')),
-        ),
-        for (final c in starred)
-          SliverToBoxAdapter(
-            child: _ConvRow(
-              key: ValueKey('star_${c.id}'),
-              keyStr: 'star_${c.id}',
-              conv: c,
-              accent: _accent,
-              hoveredKey: _hoveredKey,
-              onHover: (k) => setState(() => _hoveredKey = k),
-              isActive: store.activeId == c.id,
-              onTap: () => store.activate(c.id),
-              onMenu: (offset) => _showConvMenu(context, c, offset),
-              onClaimRightClick: _claimItemRightClick,
-            ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
-      ],
       if (pinned.isNotEmpty) ...[
         SliverToBoxAdapter(
           child: _SectionHeader(label: I18n.t('sidebar.section.pinned')),
@@ -546,9 +524,7 @@ class _SidebarState extends State<Sidebar> {
                         return ListTile(
                           dense: true,
                           leading: Icon(
-                            m.starred
-                                ? Icons.star
-                                : Icons.chat_bubble_outline,
+                            Icons.chat_bubble_outline,
                             size: 16,
                             color: AppColors.primary,
                           ),

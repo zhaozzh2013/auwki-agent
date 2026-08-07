@@ -91,6 +91,12 @@ class GitService {
     return root;
   }
 
+  /// 系统是否安装了可用的 git。
+  static Future<bool> gitAvailable() async {
+    final r = await _run(['--version']);
+    return r.exitCode == 0;
+  }
+
   static Future<ProcessResult> _run(
     List<String> args, {
     String? workingDirectory,

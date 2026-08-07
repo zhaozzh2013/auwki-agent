@@ -809,7 +809,7 @@ class _InspectorRow extends StatelessWidget {
               value,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.left,
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 12,
@@ -894,6 +894,8 @@ class _EmptyHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = AppState.settingsOf(context);
+    final showOnboarding = settings.apiKey.isEmpty;
     return Container(
       color: AppColors.bg,
       child: SafeArea(
@@ -913,17 +915,23 @@ class _EmptyHome extends StatelessWidget {
                   children: [
                     _HeroTitle(text: greeting, accent: accent),
                     const SizedBox(height: 20),
-                    _OnboardingCard(accent: accent),
-                    const SizedBox(height: 12),
-                    _WorkspaceCard(
-                      workspaceDir: workspaceDir,
-                      accent: accent,
-                      onChanged: onWorkspaceChanged,
+                    if (showOnboarding) ...[
+                      _OnboardingCard(accent: accent),
+                      const SizedBox(height: 12),
+                    ],
+                    _Entrance(
+                      child: _WorkspaceCard(
+                        workspaceDir: workspaceDir,
+                        accent: accent,
+                        onChanged: onWorkspaceChanged,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    _RecommendCard(
-                      accent: accent,
-                      onStart: onStartTask,
+                    _Entrance(
+                      child: _RecommendCard(
+                        accent: accent,
+                        onStart: onStartTask,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     ControlsCard(
@@ -955,7 +963,7 @@ class _OnboardingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 760,
+      width: 680,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -1078,7 +1086,7 @@ class _WorkspaceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final custom = workspaceDir != null && workspaceDir!.trim().isNotEmpty;
     return Container(
-      width: 760,
+      width: 680,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -1174,7 +1182,7 @@ class _RecommendCard extends StatelessWidget {
       I18n.t('home.task.report'),
     ];
     return Container(
-      width: 760,
+      width: 680,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -1360,22 +1368,18 @@ class _ChatViewState extends State<ChatView> {
                           accent: widget.accent,
                           palette: context.palette,
                           onEdit: message.sender == Sender.user
-                              ? (newText) => AppState.chatOf(
-                                    context,
-                                  ).editUserMessage(conv.id, message.id, newText)
+                              ? (newText) {
+                                  AppState.chatOf(context).editUserMessage(
+                                    conv.id,
+                                    message.id,
+                                    newText,
+                                  );
+                                  widget.onRegenerate(conv.id, message.id);
+                                }
                               : null,
                           onRegenerate: message.sender == Sender.user
                               ? () => widget.onRegenerate(conv.id, message.id)
                               : null,
-                          starred: message.starred,
-                          onToggleStar:
-                              (message.sender == Sender.user ||
-                                      message.sender == Sender.assistant)
-                                  ? () => AppState.chatOf(context).toggleStar(
-                                        conv.id,
-                                        message.id,
-                                      )
-                                  : null,
                         ),
                       ),
                     );
@@ -1403,6 +1407,55 @@ class _ChatViewState extends State<ChatView> {
   }
 }
 
+class _Entrance extends StatelessWidget {
+  const _Entrance({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - t)),
+          child: child,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _HoverReveal extends StatefulWidget {
+  const _HoverReveal({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_HoverReveal> createState() => _HoverRevealState();
+}
+
+class _HoverRevealState extends State<_HoverReveal> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedOpacity(
+        opacity: _hovered ? 1 : 0,
+        duration: const Duration(milliseconds: 150),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
     required this.message,
@@ -1410,8 +1463,6 @@ class _MessageBubble extends StatelessWidget {
     required this.palette,
     this.onEdit,
     this.onRegenerate,
-    this.starred = false,
-    this.onToggleStar,
   });
 
   final Message message;
@@ -1419,8 +1470,6 @@ class _MessageBubble extends StatelessWidget {
   final AppPalette palette;
   final ValueChanged<String>? onEdit;
   final VoidCallback? onRegenerate;
-  final bool starred;
-  final VoidCallback? onToggleStar;
 
   void _copyMessage(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.text));
@@ -1530,47 +1579,60 @@ class _MessageBubble extends StatelessWidget {
                 ? CrossAxisAlignment.end
                 : CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: isUser ? accent : AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                  _HoverReveal(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: isUser
+                          ? [
+                              _smallIcon(
+                                context,
+                                Icons.copy,
+                                I18n.t('conv.copy'),
+                                () => _copyMessage(context),
+                              ),
+                              if (onEdit != null)
+                                _smallIcon(
+                                  context,
+                                  Icons.edit_outlined,
+                                  I18n.t('chat.edit'),
+                                  () => _editMessage(context),
+                                ),
+                              if (onRegenerate != null)
+                                _smallIcon(
+                                  context,
+                                  Icons.refresh,
+                                  I18n.t('chat.regenerate'),
+                                  onRegenerate!,
+                                ),
+                              const SizedBox(width: 6),
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  color: accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ]
+                          : [
+                              Text(
+                                label,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              _smallIcon(
+                                context,
+                                Icons.copy,
+                                I18n.t('conv.copy'),
+                                () => _copyMessage(context),
+                              ),
+                            ],
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  _smallIcon(
-                    context,
-                    Icons.copy,
-                    I18n.t('conv.copy'),
-                    () => _copyMessage(context),
-                  ),
-                  if (onEdit != null)
-                    _smallIcon(
-                      context,
-                      Icons.edit_outlined,
-                      I18n.t('chat.edit'),
-                      () => _editMessage(context),
-                    ),
-                  if (onRegenerate != null)
-                    _smallIcon(
-                      context,
-                      Icons.refresh,
-                      I18n.t('chat.regenerate'),
-                      onRegenerate!,
-                    ),
-                  if (onToggleStar != null)
-                    _smallIcon(
-                      context,
-                      starred ? Icons.star : Icons.star_border,
-                      I18n.t('chat.star'),
-                      onToggleStar!,
-                    ),
-                ],
-              ),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -2075,7 +2137,7 @@ class ControlsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 760,
+      width: 680,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
