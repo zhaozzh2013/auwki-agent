@@ -110,6 +110,13 @@ class _HomePageState extends State<HomePage> {
     _regenerateDraft.value = prompt;
   }
 
+  Future<void> _pickWorkspace() async {
+    final dir = await FilePicker.getDirectoryPath();
+    if (dir != null && dir.trim().isNotEmpty) {
+      setState(() => _workspaceDir = dir.trim());
+    }
+  }
+
   void _openCommandPalette() {
     final store = AppState.chatOf(context);
     final settings = AppState.settingsOf(context);
@@ -250,11 +257,12 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-              regenerateDraft: _regenerateDraft,
-              onStartTask: _startTask,
-              greeting: greeting,
-            );
+                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+                  regenerateDraft: _regenerateDraft,
+                  onStartTask: _startTask,
+                  onPickWorkspace: _pickWorkspace,
+                  greeting: greeting,
+                );
           }
           Conversation? conv;
           for (final c in store.conversations) {
@@ -272,11 +280,12 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-              regenerateDraft: _regenerateDraft,
-              onStartTask: _startTask,
-              greeting: greeting,
-            );
+                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+                  regenerateDraft: _regenerateDraft,
+                  onStartTask: _startTask,
+                  onPickWorkspace: _pickWorkspace,
+                  greeting: greeting,
+                );
           }
           return ChatView(
             conversation: conv,
@@ -874,6 +883,7 @@ class _EmptyHome extends StatelessWidget {
     required this.workspaceDir,
     required this.regenerateDraft,
     required this.onStartTask,
+    required this.onPickWorkspace,
     required this.onModeChanged,
     required this.onThinkingChanged,
     required this.onWorkspaceChanged,
@@ -887,6 +897,7 @@ class _EmptyHome extends StatelessWidget {
   final String? workspaceDir;
   final ValueNotifier<String?> regenerateDraft;
   final ValueChanged<String> onStartTask;
+  final VoidCallback onPickWorkspace;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
   final ValueChanged<String?> onWorkspaceChanged;
@@ -919,21 +930,6 @@ class _EmptyHome extends StatelessWidget {
                       _OnboardingCard(accent: accent),
                       const SizedBox(height: 12),
                     ],
-                    _Entrance(
-                      child: _WorkspaceCard(
-                        workspaceDir: workspaceDir,
-                        accent: accent,
-                        onChanged: onWorkspaceChanged,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _Entrance(
-                      child: _RecommendCard(
-                        accent: accent,
-                        onStart: onStartTask,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
                     ControlsCard(
                       mode: mode,
                       thinking: thinking,
@@ -943,6 +939,15 @@ class _EmptyHome extends StatelessWidget {
                       regenerateDraft: regenerateDraft,
                       onModeChanged: onModeChanged,
                       onThinkingChanged: onThinkingChanged,
+                    ),
+                    const SizedBox(height: 12),
+                    _Entrance(
+                      child: _QuickStartRow(
+                        workspaceDir: workspaceDir,
+                        accent: accent,
+                        onPickWorkspace: onPickWorkspace,
+                        onStart: onStartTask,
+                      ),
                     ),
                   ],
                 ),
@@ -1407,6 +1412,104 @@ class _ChatViewState extends State<ChatView> {
   }
 }
 
+class _QuickStartRow extends StatelessWidget {
+  const _QuickStartRow({
+    required this.workspaceDir,
+    required this.accent,
+    required this.onPickWorkspace,
+    required this.onStart,
+  });
+
+  final String? workspaceDir;
+  final Color accent;
+  final VoidCallback onPickWorkspace;
+  final ValueChanged<String> onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final tasks = [
+      I18n.t('home.task.progress'),
+      I18n.t('home.task.snake'),
+      I18n.t('home.task.review'),
+      I18n.t('home.task.report'),
+    ];
+    return Container(
+      width: 680,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: InkWell(
+              onTap: onPickWorkspace,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.folder_outlined,
+                      size: 15,
+                      color: accent,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        workspaceDir?.trim().isNotEmpty == true
+                            ? workspaceDir!
+                            : I18n.t('home.workspace.pick'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: workspaceDir?.trim().isNotEmpty == true
+                              ? AppColors.textPrimary
+                              : AppColors.textTertiary,
+                          fontSize: 11.5,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 4,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.end,
+              children: [
+                for (final t in tasks)
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text(
+                      t,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 11,
+                      ),
+                    ),
+                    backgroundColor: AppColors.surfaceAlt,
+                    side: BorderSide(color: AppColors.border),
+                    onPressed: () => onStart(t),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Entrance extends StatelessWidget {
   const _Entrance({required this.child});
 
@@ -1426,32 +1529,6 @@ class _Entrance extends StatelessWidget {
         ),
       ),
       child: child,
-    );
-  }
-}
-
-class _HoverReveal extends StatefulWidget {
-  const _HoverReveal({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_HoverReveal> createState() => _HoverRevealState();
-}
-
-class _HoverRevealState extends State<_HoverReveal> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedOpacity(
-        opacity: _hovered ? 1 : 0,
-        duration: const Duration(milliseconds: 150),
-        child: widget.child,
-      ),
     );
   }
 }
@@ -1579,11 +1656,10 @@ class _MessageBubble extends StatelessWidget {
                 ? CrossAxisAlignment.end
                 : CrossAxisAlignment.start,
             children: [
-                  _HoverReveal(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: isUser
-                          ? [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: isUser
+                        ? [
                               _smallIcon(
                                 context,
                                 Icons.copy,
@@ -1613,8 +1689,8 @@ class _MessageBubble extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ]
-                          : [
+                          ]
+                        : [
                               Text(
                                 label,
                                 style: TextStyle(
@@ -1630,8 +1706,7 @@ class _MessageBubble extends StatelessWidget {
                                 I18n.t('conv.copy'),
                                 () => _copyMessage(context),
                               ),
-                            ],
-                    ),
+                          ],
                   ),
               const SizedBox(height: 4),
               Container(
