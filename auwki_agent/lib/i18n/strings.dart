@@ -65,6 +65,7 @@ class I18n {
       'chat.assistant': 'AUWKI',
       'chat.no_key': '[未配置 API Key]',
       'chat.connecting': '[正在连接…]',
+      'chat.finalize_prompt': '请基于以上执行结果直接给出最终回答，不要调用任何工具。',
       'chat.stream_empty': '[错误] 连接中断，未收到内容，请重试。',
       'chat.stop': '停止',
       'chat.cancelled': '[已停止]',
@@ -85,6 +86,9 @@ class I18n {
       'dialog.command.body': 'AI 请求执行以下命令：',
       'dialog.command.allow': '允许',
       'dialog.command.deny': '拒绝',
+      'dialog.command.batch.title': 'AI 请求执行 {count} 条命令',
+      'dialog.command.batch.body': '允许后这些命令将一次性执行：',
+      'dialog.command.batch.allow': '全部允许',
       'dialog.subagent_command.title': '子代理请求执行命令',
       'dialog.subagent_command.body': '旗舰模式中的子代理请求执行以下命令：',
       'search.title': '搜索对话',
@@ -467,6 +471,8 @@ class I18n {
       'chat.assistant': 'AUWKI',
       'chat.no_key': '[No API key]',
       'chat.connecting': '[Connecting…]',
+      'chat.finalize_prompt':
+          'Based on the execution results above, give the final answer directly. Do not call any tools.',
       'chat.stream_empty': '[Error] Connection interrupted; no content received. Please retry.',
       'chat.stop': 'Stop',
       'chat.cancelled': '[Stopped]',
@@ -487,6 +493,10 @@ class I18n {
       'dialog.command.body': 'AI requested the following command:',
       'dialog.command.allow': 'Allow',
       'dialog.command.deny': 'Deny',
+      'dialog.command.batch.title': 'AI requests to run {count} commands',
+      'dialog.command.batch.body':
+          'These commands will be executed at once if allowed:',
+      'dialog.command.batch.allow': 'Allow all',
       'dialog.subagent_command.title': 'A sub-agent requests a command',
       'dialog.subagent_command.body':
           'A flagship sub-agent requested to run the following command:',

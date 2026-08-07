@@ -628,6 +628,7 @@ class _ChatInputState extends State<ChatInput> {
         );
       }
 
+      var answered = false;
       // 工具轮次用完后仍保留一轮最终收尾，避免“执行完直接结束”。
       while (turn < maxTurns + 1) {
         if (cancel.isCompleted) break;
@@ -676,6 +677,7 @@ class _ChatInputState extends State<ChatInput> {
             I18n.t('chat.stream_empty'),
             persist: false,
           );
+          answered = true;
           break;
         }
         final isFinal = rawText.contains('[最后输出]');
@@ -730,9 +732,16 @@ class _ChatInputState extends State<ChatInput> {
           }
           continue;
         }
-        if (calls.isEmpty) break;
+        if (calls.isEmpty) {
+          answered = true;
+          break;
+        }
 
         final results = <AgentResult>[];
+        final commands = calls.where((c) => c.tool == 'command').toList();
+        final allowCommands = commands.isEmpty
+            ? null
+            : await _confirmBatchCommands(commands);
         for (final call in calls) {
           final toolMsgId = 'm_${DateTime.now().microsecondsSinceEpoch}_t';
           store.addMessage(
@@ -746,7 +755,21 @@ class _ChatInputState extends State<ChatInput> {
               toolRunning: true,
             ),
           );
-          final r = await _executeCall(call, cwd: workspace);
+          final AgentResult r;
+          if (call.tool == 'command' && allowCommands == false) {
+            r = AgentResult(
+              call: call,
+              output: '',
+              error: I18n.t(
+                'agent.error.command_cancelled',
+                {'command': call.args},
+              ),
+            );
+          } else if (call.tool == 'command' && allowCommands == true) {
+            r = await AgentRunner.execute(call, cwd: workspace);
+          } else {
+            r = await _executeCall(call, cwd: workspace);
+          }
           results.add(r);
           if (r.ok &&
               (call.tool == 'writefile' || call.tool == 'replacefile')) {
@@ -785,6 +808,50 @@ class _ChatInputState extends State<ChatInput> {
               sender: Sender.assistant,
               text: I18n.t('chat.connecting'),
             ),
+          );
+        }
+      }
+
+      // 兜底：工具轮次全部用完后仍没有最终回答，强制收尾一轮。
+      if (!answered && !cancel.isCompleted) {
+        final finalReq = ChatRequest(
+          system: systemPrompt,
+          messages: [
+            ...currentHistory,
+            {
+              'role': 'user',
+              'content': I18n.t('chat.finalize_prompt'),
+            },
+          ],
+          model: _modelFor(widget.thinking),
+          maxTokens: finalMaxTokens,
+        );
+        store.updateMessage(
+          convId,
+          placeholderId,
+          I18n.t('chat.connecting'),
+          persist: false,
+        );
+        try {
+          final raw = StringBuffer();
+          await _collectStream(
+            cancel,
+            _chatWithRetry(cancel, () => client.chatStream(finalReq)),
+            (chunk) {
+              raw.write(chunk);
+              store.updateMessage(
+                convId,
+                placeholderId,
+                _stripToolBlocks(raw.toString()),
+                persist: false,
+              );
+            },
+          );
+        } catch (e) {
+          store.updateMessage(
+            convId,
+            placeholderId,
+            '${I18n.t('chat.error')} $e',
           );
         }
       }
@@ -974,13 +1041,13 @@ class _ChatInputState extends State<ChatInput> {
 
     void armWatchdog() {
       watchdog?.cancel();
-      watchdog = Timer(const Duration(seconds: 120), () {
+      watchdog = Timer(const Duration(seconds: 300), () {
         sub.cancel();
         if (!done.isCompleted) {
           done.completeError(
             TimeoutException(
               'Stream idle timeout',
-              const Duration(seconds: 120),
+              const Duration(seconds: 300),
             ),
           );
         }
@@ -1028,13 +1095,13 @@ class _ChatInputState extends State<ChatInput> {
 
     void armWatchdog() {
       watchdog?.cancel();
-      watchdog = Timer(const Duration(seconds: 120), () {
+      watchdog = Timer(const Duration(seconds: 300), () {
         sub.cancel();
         if (!controller.isClosed) {
           controller.addError(
             TimeoutException(
               'Stream idle timeout',
-              const Duration(seconds: 120),
+              const Duration(seconds: 300),
             ),
           );
           controller.close();
@@ -1180,6 +1247,81 @@ class _ChatInputState extends State<ChatInput> {
       );
     }
     return AgentRunner.execute(call, cwd: cwd);
+  }
+
+  /// 批量命令统一确认：一次弹窗列出所有命令，避免逐个弹窗卡住流程。
+  Future<bool> _confirmBatchCommands(List<AgentToolCall> commands) async {
+    if (!mounted) return false;
+    final allow = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          I18n.t('dialog.command.batch.title', {
+            'count': '${commands.length}',
+          }),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  I18n.t('dialog.command.batch.body'),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (final c in commands)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.bg,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Text(
+                        c.args,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              I18n.t('dialog.command.deny'),
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
+            child: Text(I18n.t('dialog.command.batch.allow')),
+          ),
+        ],
+      ),
+    );
+    return allow == true;
   }
 
   bool _handleSlashCommand(ChatStore store, String convId, String text) {
