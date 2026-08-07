@@ -149,7 +149,7 @@ class I18n {
           '请以代码评审模式审查：{target}\n\n要求：优先找 bug、回归风险、安全/性能问题和缺失验证；按严重程度排序；给出文件/位置线索；不要做泛泛表扬。如果需要读取项目，请严格使用工具。',
       'command.goal.default_goal': '完成当前用户目标',
       'command.goal.prompt':
-          '进入 Goal 模式。目标：{goal}\n\n请持续推进直到目标完成或明确阻塞。每轮先给当前状态，再执行下一步；必要时使用工具；如果目标过大，拆成可验证的小步骤。',
+          '进入 Goal 模式。目标：{goal}\n\n持续推进直到目标完成或明确阻塞：1) 先拆解成可验证的小步骤并给出检查点；2) 每轮先汇报当前状态，再执行下一步；3) 每一步完成后用工具验证；4) 失败时基于错误修正重试一次，仍失败则说明阻塞并给出替代方案；5) 完成后给出总结。',
       'command.poor.default_request': '用最低成本完成当前请求',
       'command.poor.prompt':
           '进入低成本模式：{request}\n\n要求：少请求、少 token、少 agent；优先直接回答或使用最少工具；除非必要，不启动多 Agent。',
@@ -562,7 +562,7 @@ class I18n {
           'Review this as code review: {target}\n\nRequirements: prioritize bugs, regression risks, security/performance issues, and missing verification; order by severity; include file/location clues; avoid generic praise. If project access is needed, use tools strictly.',
       'command.goal.default_goal': 'finish the current user goal',
       'command.goal.prompt':
-          'Enter Goal mode. Goal: {goal}\n\nKeep driving until the goal is complete or clearly blocked. Each round should state current status, then execute the next step; use tools when needed; if the goal is large, split it into verifiable steps.',
+          'Enter Goal mode. Goal: {goal}\n\nKeep driving until the goal is complete or clearly blocked: 1) break it into verifiable steps with checkpoints; 2) report status first, then execute the next step; 3) verify each step with tools; 4) on failure, retry once after fixing the error, then report the blocker with an alternative; 5) summarize when done.',
       'command.poor.default_request':
           'complete the current request with minimum cost',
       'command.poor.prompt':
