@@ -1,5 +1,8 @@
 # AUWKI Agent
 
+中文 [English](/docs/README_EN.md)
+
+
 ![License](https://img.shields.io/github/license/zhaozzh2013/auwki-agent)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Web%20%7C%20Android-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.44%2B-02569B)
