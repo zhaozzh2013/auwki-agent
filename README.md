@@ -68,17 +68,18 @@ LLM 可以在正式输出中使用 `[正式输出] tool("args") [输出结束]` 
 |---|---|
 | **Linux** | ✅ 完整支持 |
 | **Web** | ✅ 完整支持 |
-| **Android** | 🟡 桌面 API 可用，移动端 UI 待适配 |
+| **Android** | 🟡 计划支持 |
 | **Windows** | ✅ 完整支持 |
-| **macOS** | ⏳ 待编译支持 |
-| **iOS** | ⏳ 待编译支持 |
+| **macOS** | 完全不支持 |
+| **iOS** | 完全不支持 |
 
 
 ---
 
 ## 🚀 快速开始
 
-Release 中提供了 Windows 的预编译版本：绿色版 zip 与安装包 Setup.exe，你可直接下载。
+Release 中提供了 Windows 和 Linux 的预编译版本：Windows：绿色版 zip 与安装包 Setup.exe、Linux：rpm包、deb包。你可直接下载。
+*计划在几周后上传AUR，请您耐心等待
 
 ### 环境要求
 
@@ -224,6 +225,8 @@ MIT License —— 详见 [LICENSE](LICENSE) 文件。
 ---
 
 ## 🙏 致谢
+
+特别感谢 [Rank](https://github.com/) 为我们提供的 Linux 预编译包，大家有时间也可以给他的仓库 Fork 一下，这是对我们莫大的支持。
 
 **AUWKI Agent** 的灵感来自这些项目：
 
