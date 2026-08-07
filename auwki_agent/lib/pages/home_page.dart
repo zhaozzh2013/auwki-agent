@@ -1796,6 +1796,14 @@ class _MessageBubble extends StatelessWidget {
                           ),
                         ),
                         blockquotePadding: const EdgeInsets.only(left: 10),
+                        horizontalRuleDecoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: AppColors.border,
+                              width: 1,
+                            ),
+                          ),
+                        ),
                         listBullet: TextStyle(color: fg, fontSize: 13.5),
                         tableHead: TextStyle(
                           color: fg,

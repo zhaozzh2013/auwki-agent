@@ -65,13 +65,14 @@ class I18n {
       'chat.assistant': 'AUWKI',
       'chat.no_key': '[未配置 API Key]',
       'chat.connecting': '[正在连接…]',
+      'chat.stream_empty': '[错误] 连接中断，未收到内容，请重试。',
       'chat.stop': '停止',
       'chat.cancelled': '[已停止]',
       'chat.error': '[错误]',
       'chat.tool_result_prompt':
           '[执行结果]\n{result}\n\n请基于以上结果继续回答，可继续使用 [正式输出] 块调用工具，或直接给出最终回答。',
       'chat.tool_block_retry_prompt':
-          '[工具块解析失败] 请重新输出工具调用块：每个工具调用独占一行，参数放在英文双引号中；参数内部的双引号用反斜杠转义，换行用反斜杠 n 表示。不要混入 Markdown 或解释文字。',
+          '[工具块解析失败] 如果这是最终答案，请改用 [最后输出] 包裹并以 [输出结束] 结束；如果需要工具，请重新输出工具调用块：每个工具调用独占一行，参数放在英文双引号中；参数内部的双引号用反斜杠转义，换行用反斜杠 n 表示。不要混入 Markdown 或解释文字。',
       'dialog.rename.title': '重命名对话',
       'dialog.rename.hint': '输入新名称',
       'dialog.delete.title': '删除对话',
@@ -302,7 +303,7 @@ class I18n {
       'git.revert.done': '已回退',
       'git.diff_stat': '更改统计',
       'git.close': '关闭',
-      'git.no_repo': '当前工作目录不是 git 仓库，或未安装 git。\n\nAUWKI 的 Git 面板会基于应用启动目录自动寻找仓库根目录。',
+      'git.no_repo': '当前目录还不是 git 仓库。\n\n点击“新建仓库”即可在这里初始化，或给该对话指定一个已有仓库目录。',
       'git.init.title': '当前目录还不是 Git 仓库',
       'git.init.body': '点击“新建仓库”即可在这里初始化 Git，已有文件不会被改动。',
       'git.init.action': '新建仓库',
@@ -466,13 +467,14 @@ class I18n {
       'chat.assistant': 'AUWKI',
       'chat.no_key': '[No API key]',
       'chat.connecting': '[Connecting…]',
+      'chat.stream_empty': '[Error] Connection interrupted; no content received. Please retry.',
       'chat.stop': 'Stop',
       'chat.cancelled': '[Stopped]',
       'chat.error': '[Error]',
       'chat.tool_result_prompt':
           '[Execution result]\n{result}\n\nContinue based on the results above. You may keep using [正式输出] tool blocks, or provide the final answer directly.',
       'chat.tool_block_retry_prompt':
-          '[Tool block parse failed] Please output the tool block again: one tool call per line, arguments in English double quotes; escape inner quotes with backslashes and use backslash-n for newlines. No markdown or explanatory text inside the block.',
+          '[Tool block parse failed] If this is your final answer, wrap it with [最后输出] and end with [输出结束]. If you need tools, output the tool block again: one call per line, arguments in English double quotes; escape inner quotes with backslashes and use backslash-n for newlines. No markdown or explanatory text inside the block.',
       'dialog.rename.title': 'Rename conversation',
       'dialog.rename.hint': 'New name',
       'dialog.delete.title': 'Delete conversation',
@@ -712,7 +714,7 @@ class I18n {
       'git.diff_stat': 'Diff stat',
       'git.close': 'Close',
       'git.no_repo':
-          'The working directory is not a git repository, or git is not installed.\n\nThe Git panel looks for the repository root starting from the app launch directory.',
+          'This directory is not a git repository yet.\n\nClick "Create repository" to initialize it here, or point this conversation to an existing repository directory.',
       'git.init.title': 'This directory is not a Git repository yet',
       'git.init.body':
           'Click "Create repository" to initialize Git here; existing files are untouched.',

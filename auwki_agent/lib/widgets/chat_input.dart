@@ -667,7 +667,20 @@ class _ChatInputState extends State<ChatInput> {
           );
         }
 
-        final calls = AgentRunner.parse(rawAcc.toString());
+        final rawText = rawAcc.toString();
+        if (rawText.trim().isEmpty) {
+          store.updateMessage(
+            convId,
+            placeholderId,
+            I18n.t('chat.stream_empty'),
+            persist: false,
+          );
+          break;
+        }
+        final isFinal = rawText.contains('[最后输出]');
+        final calls = isFinal
+            ? const <AgentToolCall>[]
+            : AgentRunner.parse(rawText);
         final thinking = widget.thinking;
         if (calls.isEmpty &&
             thinking != ThinkingLevel.fast &&
@@ -1232,6 +1245,7 @@ class _ChatInputState extends State<ChatInput> {
       RegExp(r'\[正式输出\][\s\S]*?\[输出结束\]', multiLine: true),
       '',
     );
+    s = s.replaceAll('[最后输出]', '').replaceAll('[输出结束]', '');
     s = s.replaceAll(
       RegExp(r'change_model\s*\(\s*work\s*\)', caseSensitive: false),
       '',

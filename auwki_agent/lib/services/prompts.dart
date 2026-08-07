@@ -52,6 +52,7 @@ command("shell 命令")
 - `replacefile` 和 `writefile` 的分隔符固定为 `|||`，不要改成逗号、JSON 或多参数函数
 - 一旦输出工具调用块，本轮不要再写最终答案；等待系统回填 `[执行结果]` 后再继续
 - 如果不需要工具，不要输出 `[正式输出]` 块，直接回答
+- 最终回答请以 `[最后输出]` 开头，并在末尾写上 `[输出结束]`，系统会识别并停止本轮，不会再次循环
 
 注意：
 - FAST 档位禁止使用任何工具
@@ -118,6 +119,7 @@ Strict rules:
 - `replacefile` and `writefile` must use `|||` separators; do not use commas, JSON, or multi-argument calls
 - Once you emit a tool block, do not write the final answer in the same turn; wait for the system to provide `[Execution result]`
 - If no tool is needed, do not output a `[正式输出]` block; answer directly
+- Start your final answer with `[最后输出]` and end it with `[输出结束]`; the system will recognize it and stop this turn without looping
 
 Notes:
 - FAST must not use tools
