@@ -125,6 +125,10 @@ class I18n {
           '语言切换需要重启应用才能完整生效，{n} 秒后自动重启。',
       'settings.restart.now': '立即重启',
       'settings.restart.later': '稍后（下次启动生效）',
+      'easter.title': '欸!(⊙﹏⊙) 你发现我啦~',
+      'easter.body':
+          '真是个细心的人呢，好吧，其实没什么奖励，\n要不，告诉你我的邮箱怎么样！\n好像没啥用……\n那就祝你 代码永远不出bug！\n嘻嘻。',
+      'easter.ok': '嘻嘻，知道啦',
       'settings.enter_to_send': '回车发送',
       'settings.enter.send': 'Enter 发送',
       'settings.enter.newline': 'Enter 换行',
@@ -534,6 +538,10 @@ class I18n {
           'Restarting is required for the language to fully apply. Auto-restart in {n}s.',
       'settings.restart.now': 'Restart now',
       'settings.restart.later': 'Later (next launch)',
+      'easter.title': 'Ah! (⊙﹏⊙) You found me~',
+      'easter.body':
+          'You are quite observant. Well, there is no real reward,\nbut how about I tell you my email?\nProbably useless…\nAnyway, may your code never have bugs!\nHehe.',
+      'easter.ok': 'Hehe, got it!',
       'settings.enter_to_send': 'Enter key',
       'settings.enter.send': 'Enter sends',
       'settings.enter.newline': 'Enter newline',

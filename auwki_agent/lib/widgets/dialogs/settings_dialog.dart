@@ -52,6 +52,8 @@ class _SettingsFormState extends State<_SettingsForm> {
   late final TextEditingController _baseUrl;
   bool _obscure = true;
   bool _initialized = false;
+  int _versionTaps = 0;
+  DateTime _lastVersionTap = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -378,11 +380,18 @@ class _SettingsFormState extends State<_SettingsForm> {
             ),
             const SizedBox(height: 10),
             Center(
-              child: Text(
-                '${AppInfo.title} ${AppInfo.version}',
-                style: TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 11,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _onVersionTap(context),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text(
+                    '${AppInfo.title} ${AppInfo.version}',
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 11,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -440,6 +449,50 @@ class _SettingsFormState extends State<_SettingsForm> {
     if (restart == true && mounted) {
       await AppRestarter.restart();
     }
+  }
+
+  void _onVersionTap(BuildContext context) {
+    final now = DateTime.now();
+    if (now.difference(_lastVersionTap).inMilliseconds > 1500) {
+      _versionTaps = 0;
+    }
+    _lastVersionTap = now;
+    _versionTaps++;
+    if (_versionTaps < 5) return;
+    _versionTaps = 0;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Row(
+          children: [
+            Icon(Icons.celebration, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              I18n.t('easter.title'),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
+            ),
+          ],
+        ),
+        content: Text(
+          I18n.t('easter.body'),
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 13,
+            height: 1.7,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              I18n.t('easter.ok'),
+              style: TextStyle(color: AppColors.primary),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onLocaleSelected(String code) async {
