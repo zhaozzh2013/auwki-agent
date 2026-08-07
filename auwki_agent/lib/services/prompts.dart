@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../i18n/strings.dart';
 import '../services/settings_store.dart';
 import '../widgets/thinking_slider.dart';
@@ -452,11 +454,18 @@ Available agents:
   }
 
   static String _workspacePrompt(String path, {required bool isEnglish}) {
+    final platform = Platform.isWindows
+        ? 'Windows'
+        : Platform.isMacOS
+        ? 'macOS'
+        : 'Linux';
+    final shell = Platform.isWindows ? 'PowerShell' : 'sh';
     if (isEnglish) {
       return '''
 ## Working Directory
 The current conversation's working directory is:
 $path
+- Platform: $platform. The command tool runs commands with $shell; write commands in $shell syntax
 - All relative paths in listfiles/readfile/writefile/replacefile/command are relative to this directory
 - Absolute paths must stay inside this directory unless the user explicitly asks otherwise
 - Do not pollute the directory with unrelated files
@@ -466,6 +475,7 @@ $path
 ## 工作目录
 当前对话的工作目录是：
 $path
+- 当前系统：$platform。command 工具使用 $shell 执行命令，请按对应语法书写
 - listfiles / readfile / writefile / replacefile / command 中的相对路径都基于该目录
 - 绝对路径必须位于该工作目录内，除非用户明确要求
 - 不要在该目录外创建无关文件

@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../i18n/strings.dart';
 
-enum ProviderKind { claude, openai, deepseek, MiniMax }
+enum ProviderKind { claude, openai, deepseek, MiniMax, custom }
 
 enum ApiStyle { anthropic, openai }
 
@@ -95,6 +95,35 @@ const List<ProviderConfig> kProviders = [
 ProviderConfig providerById(String id) => kProviders.firstWhere(
   (p) => p.kind.name == id,
   orElse: () => kProviders.first,
+);
+
+/// 用户在设置里添加的自定义供应商（OpenAI / Anthropic 兼容）。
+class CustomProviderSeed {
+  const CustomProviderSeed({
+    required this.id,
+    required this.name,
+    required this.baseUrl,
+    required this.apiStyle,
+    required this.models,
+  });
+
+  final String id;
+  final String name;
+  final String baseUrl;
+  final ApiStyle apiStyle;
+  final List<String> models;
+}
+
+ProviderConfig providerFromSeed(CustomProviderSeed seed) => ProviderConfig(
+  kind: ProviderKind.custom,
+  label: seed.name.trim().isEmpty ? seed.id : seed.name.trim(),
+  baseUrl: seed.baseUrl.trim(),
+  apiStyle: seed.apiStyle,
+  defaultModel: seed.models.isEmpty ? 'model' : seed.models.first.trim(),
+  models: [
+    for (final m in seed.models)
+      if (m.trim().isNotEmpty) ModelOption(m.trim(), m.trim()),
+  ],
 );
 
 class ChatRequest {

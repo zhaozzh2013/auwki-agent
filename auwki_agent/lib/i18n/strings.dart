@@ -82,6 +82,15 @@ class I18n {
       'profile.initial': '头像文字',
       'profile.initial.default': '口',
       'settings.provider': '供应商',
+      'settings.custom_provider': '自定义供应商',
+      'settings.custom_provider.add': '添加自定义供应商',
+      'settings.custom_provider.name': '名称',
+      'settings.custom_provider.base_url': 'Base URL',
+      'settings.custom_provider.api_style': '接口风格',
+      'settings.custom_provider.api_style.openai': 'OpenAI 兼容',
+      'settings.custom_provider.api_style.anthropic': 'Anthropic 兼容',
+      'settings.custom_provider.models': '模型列表（英文逗号分隔）',
+      'settings.custom_provider.delete': '删除该供应商',
       'settings.model': '模型',
       'settings.base_url': 'Base URL',
       'settings.language': '语言',
@@ -122,6 +131,7 @@ class I18n {
       'command.new.prompt':
           '进入创建项目工作流：{request}\n\n必须先做安全检查：1. 确认项目名和目标目录；2. 用 listfiles 检查目标目录是否存在、是否非空；3. 禁止覆盖非空目录或敏感路径；4. 选择最小脚手架方案；5. 创建后检查关键文件；6. 运行最轻量验证命令；7. 汇报目录、文件、验证结果和启动命令。若用户没有提供目标目录，先询问，不要直接在仓库根目录生成一堆文件。',
       'inspector.title': 'Inspector',
+      'inspector.close': '关闭面板',
       'inspector.session': '会话',
       'inspector.workflow': '工作流',
       'inspector.recent_tools': '最近工具',
@@ -305,9 +315,12 @@ class I18n {
       'agent.error.replace_args': '[错误] replacefile 参数格式: path|||old|||new',
       'agent.error.replace_missing': '[错误] 未找到 old 片段，未修改文件: {path}',
       'agent.error.command_blocked': '[已拦截] 高风险命令已拒绝执行: {command}',
+      'agent.error.subagent_command_blocked':
+          '[已拦截] 子代理不允许直接执行命令，请交给主协调处理: {command}',
       'agent.error.command_cancelled': '[已拦截] 用户取消了命令执行: {command}',
       'agent.error.command_timeout': '[错误] 命令执行超时（30 秒），已强制终止: {command}',
-      'agent.error.command_start_failed': '[错误] 无法启动命令解释器 (bash)，请确认环境已安装 bash。',
+      'agent.error.command_start_failed':
+          '[错误] 无法启动命令解释器（Windows 使用 PowerShell，macOS/Linux 使用 sh），请确认系统环境正常。',
       'agent.error.path_blocked': '[已拦截] 拒绝写入敏感路径: {path}',
       'agent.error.empty_path': '[已拦截] 写入路径为空。',
       'agent.error.file_exists': '[已拦截] 文件已存在，拒绝覆盖: {path}',
@@ -422,6 +435,15 @@ class I18n {
       'profile.initial': 'Avatar text',
       'profile.initial.default': 'U',
       'settings.provider': 'Provider',
+      'settings.custom_provider': 'Custom providers',
+      'settings.custom_provider.add': 'Add custom provider',
+      'settings.custom_provider.name': 'Name',
+      'settings.custom_provider.base_url': 'Base URL',
+      'settings.custom_provider.api_style': 'API style',
+      'settings.custom_provider.api_style.openai': 'OpenAI compatible',
+      'settings.custom_provider.api_style.anthropic': 'Anthropic compatible',
+      'settings.custom_provider.models': 'Models (comma separated)',
+      'settings.custom_provider.delete': 'Remove this provider',
       'settings.model': 'Model',
       'settings.base_url': 'Base URL',
       'settings.language': 'Language',
@@ -463,6 +485,7 @@ class I18n {
       'command.new.prompt':
           'Enter project creation workflow: {request}\n\nMandatory safety checks: 1. Confirm project name and target directory; 2. Use listfiles to check whether the target exists and is non-empty; 3. Never overwrite non-empty directories or sensitive paths; 4. Choose the smallest scaffold; 5. Check key files after creation; 6. Run the lightest verification command; 7. Report directory, files, verification result, and run command. If the target directory is missing, ask first instead of generating files directly in the repo root.',
       'inspector.title': 'Inspector',
+      'inspector.close': 'Close panel',
       'inspector.session': 'Session',
       'inspector.workflow': 'Workflow',
       'inspector.recent_tools': 'Recent tools',
@@ -661,12 +684,14 @@ class I18n {
           '[Error] old snippet not found, file not modified: {path}',
       'agent.error.command_blocked':
           '[Blocked] Dangerous command refused: {command}',
+      'agent.error.subagent_command_blocked':
+          '[Blocked] Sub-agents cannot run commands. Ask the coordinator to run it: {command}',
       'agent.error.command_cancelled':
           '[Blocked] Command cancelled by user: {command}',
       'agent.error.command_timeout':
           '[Error] Command timed out after 30 seconds and was killed: {command}',
       'agent.error.command_start_failed':
-          '[Error] Failed to start bash. Please make sure bash is installed.',
+          '[Error] Failed to start the shell (PowerShell on Windows, sh on macOS/Linux). Please check your environment.',
       'agent.error.path_blocked':
           '[Blocked] Refusing to write sensitive path: {path}',
       'agent.error.empty_path': '[Blocked] Empty write path.',

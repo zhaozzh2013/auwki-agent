@@ -56,6 +56,23 @@ class CollaborativeSessionResult {
   final String summary;
 }
 
+/// 子代理一次完整运行的产出：思维链、最终结论与工具使用记录。
+class FlagshipAgentOutcome {
+  const FlagshipAgentOutcome({
+    required this.thinking,
+    required this.output,
+    required this.toolTrace,
+    this.error,
+  });
+
+  final String thinking;
+  final String output;
+  final String toolTrace;
+  final String? error;
+
+  bool get ok => error == null;
+}
+
 class FlagshipAgentPlan {
   FlagshipAgentPlan({
     required this.items,
@@ -311,6 +328,119 @@ class AgentRunner {
     return _formatCollaboration(results, isEnglish: isEnglish);
   }
 
+  /// 主协调下发给子代理的“任务消息”，模拟用户侧对话。
+  static String flagshipAgentTaskMessage({
+    required String focus,
+    required String coordinatorNote,
+    required bool isEnglish,
+  }) {
+    final note = coordinatorNote.trim().isEmpty
+        ? (isEnglish ? '(none)' : '（无）')
+        : coordinatorNote.trim();
+    if (isEnglish) {
+      return '''
+Coordinator task for you: $focus
+Coordinator note: $note
+
+Think step by step (chain of thought). Use tools when needed. End with a concise conclusion.
+''';
+    }
+    return '''
+主协调分配给你的任务：$focus
+主协调备注：$note
+
+请先逐步思考（思维链），必要时使用工具。最后给出一段简洁结论。
+''';
+  }
+
+  /// 运行一个子代理：它可以有自己的思维链，并像主代理一样调用工具
+  /// （command 除外，命令类操作统一交给主协调），工具结果会作为
+  /// 用户消息回填，继续下一轮思考，直到不再调用工具或达到轮次上限。
+  static Future<FlagshipAgentOutcome> runFlagshipAgent({
+    required Stream<String> Function(
+      String system,
+      List<Map<String, dynamic>> messages,
+    )
+    chat,
+    required String systemPrompt,
+    required List<Map<String, dynamic>> messages,
+    String? cwd,
+    int maxTurns = 3,
+    void Function(String thinking)? onThinking,
+  }) async {
+    final thinking = StringBuffer();
+    final trace = <String>[];
+    var msgs = List<Map<String, dynamic>>.from(messages);
+    String? finalOutput;
+
+    for (var turn = 0; turn < maxTurns; turn++) {
+      final buf = StringBuffer();
+      await for (final chunk in chat(systemPrompt, msgs)) {
+        buf.write(chunk);
+        final current = thinking.toString() + buf.toString();
+        onThinking?.call(current);
+      }
+      final raw = buf.toString();
+      if (raw.trim().isEmpty) break;
+      if (thinking.isNotEmpty) thinking.write('\n\n');
+      thinking.write(raw.trim());
+
+      final calls = parse(raw);
+      if (calls.isEmpty) {
+        final visible = _stripToolBlocks(raw);
+        finalOutput = visible.trim();
+        break;
+      }
+
+      final results = <String>[];
+      for (final call in calls) {
+        if (call.tool == 'command') {
+          final blocked = I18n.t(
+            'agent.error.subagent_command_blocked',
+            {'command': call.args},
+          );
+          trace.add(blocked);
+          results.add(blocked);
+          continue;
+        }
+        final r = await execute(call, cwd: cwd);
+        final detail = r.error ?? r.output;
+        trace.add('${r.call.display}\n$detail');
+        results.add('${r.call.display}\n$detail');
+      }
+
+      msgs.add({'role': 'assistant', 'content': raw});
+      msgs.add({
+        'role': 'user',
+        'content': I18n.t(
+          'chat.tool_result_prompt',
+          {'result': results.join('\n\n')},
+        ),
+      });
+      if (turn == maxTurns - 1) {
+        final visible = _stripToolBlocks(raw);
+        finalOutput = visible.trim();
+      }
+    }
+
+    final output = (finalOutput == null || finalOutput.isEmpty)
+        ? _stripToolBlocks(thinking.toString())
+        : finalOutput;
+    return FlagshipAgentOutcome(
+      thinking: thinking.toString().trim(),
+      output: output,
+      toolTrace: trace.join('\n'),
+    );
+  }
+
+  static String _stripToolBlocks(String text) {
+    var s = text.replaceAll(
+      RegExp(r'\[正式输出\][\s\S]*?\[输出结束\]', multiLine: true),
+      '',
+    );
+    return s.trim();
+  }
+
   static Future<FlagshipAgentPlan> planFlagshipSession({
     required Stream<String> Function(
       String system,
@@ -446,9 +576,20 @@ Coordinator note: $coordinatorNote
 Your assigned focus: $focus
 
 Rules:
+- Think first, then act. It is fine to write your chain of thought in your output.
+- If you need to inspect the workspace, read/write files, or search the web, use the tool block:
+  [正式输出]
+  listfiles("path")
+  readfile("path")
+  writefile("path|||content")
+  replacefile("path|||old|||new")
+  webfetch("https://...")
+  websearch("keywords")
+  [输出结束]
+- You must NOT use the command tool. Commands are executed by the coordinator.
+- Inside the tool block, one call per line, arguments in English double quotes; tool results will come back as a user message.
 - Keep your response concise and information-dense; the coordinator will synthesize
-- Do not call tools and do not output a final answer or its markdown headings
-- Stream your analysis naturally as you think
+- End with a short conclusion, not the final answer's markdown headings
 ''';
     }
 
@@ -461,9 +602,20 @@ Rules:
 你的任务：$focus
 
 规则：
+- 先思考，再行动。可以在输出中写下你的思维链
+- 如果需要查看工作目录、读写文件或搜索网页，使用工具调用块：
+  [正式输出]
+  listfiles("路径")
+  readfile("路径")
+  writefile("路径|||内容")
+  replacefile("路径|||旧文本|||新文本")
+  webfetch("https://...")
+  websearch("关键词")
+  [输出结束]
+- 禁止使用 command 工具，命令类操作统一交给主协调执行
+- 工具块内每行一个调用，参数用英文双引号；工具结果会以用户消息返回给你
 - 输出简洁、信息密集，交由主协调综合
-- 不要调用工具，不要输出最终答案或其 Markdown 标题
-- 可以自然地流式输出你的分析
+- 最后给出一段简短结论，不要输出最终答案的 Markdown 标题
 ''';
   }
 
@@ -729,8 +881,8 @@ ${agent.instruction}
     late final Process process;
     try {
       process = await Process.start(
-        'bash',
-        ['-c', cmd],
+        _shellExecutable(),
+        _shellArgs(cmd),
         workingDirectory: cwd,
       );
     } catch (e) {
@@ -768,6 +920,19 @@ ${agent.instruction}
     return out.length > 6000
         ? '${out.substring(0, 6000)}\n${I18n.t('agent.truncated')}'
         : out;
+  }
+
+  /// 跨平台命令解释器：Windows 用 PowerShell，macOS/Linux 用 /bin/sh。
+  static String _shellExecutable() {
+    if (Platform.isWindows) return 'powershell.exe';
+    return '/bin/sh';
+  }
+
+  static List<String> _shellArgs(String cmd) {
+    if (Platform.isWindows) {
+      return ['-NoProfile', '-NonInteractive', '-Command', cmd];
+    }
+    return ['-c', cmd];
   }
 
   static Future<String> _listfiles(String path, String? cwd) async {
@@ -868,13 +1033,34 @@ ${agent.instruction}
 
   /// 把模型给出的路径解析到工作目录下；空路径表示工作目录本身。
   static String _resolvePath(String path, String? cwd) {
-    final p = path.trim().replaceAll('\\', '/');
+    var p = path.trim().replaceAll('\\', '/');
+    final home = _homeDirectory();
+    if (p == '~') {
+      p = home ?? (cwd ?? Directory.current.path).replaceAll('\\', '/');
+    } else if (p.startsWith('~/') && home != null) {
+      p = '$home/${p.substring(2)}';
+    }
     if (p.isEmpty) return (cwd ?? Directory.current.path).replaceAll('\\', '/');
     final isAbsolute =
         p.startsWith('/') || RegExp(r'^[A-Za-z]:/').hasMatch(p);
     if (isAbsolute) return p;
     final base = (cwd ?? Directory.current.path).replaceAll('\\', '/');
     return '$base/$p';
+  }
+
+  /// 跨平台用户主目录：优先 $HOME，Windows 回退到 USERPROFILE。
+  static String? _homeDirectory() {
+    final home = Platform.environment['HOME'];
+    if (home != null && home.trim().isNotEmpty) {
+      return home.trim().replaceAll('\\', '/');
+    }
+    if (Platform.isWindows) {
+      final profile = Platform.environment['USERPROFILE'];
+      if (profile != null && profile.trim().isNotEmpty) {
+        return profile.trim().replaceAll('\\', '/');
+      }
+    }
+    return null;
   }
 
   static String? _validateCommand(String cmd) {
@@ -922,8 +1108,8 @@ ${agent.instruction}
     if (!absolute) return false;
     final allowedPrefixes = [
       (cwd ?? Directory.current.path).replaceAll('\\', '/'),
-      '/tmp/',
-      '${Platform.environment['HOME'] ?? ''}/'.replaceAll('\\', '/'),
+      Directory.systemTemp.path.replaceAll('\\', '/'),
+      '${_homeDirectory() ?? ''}/'.replaceAll('\\', '/'),
     ].where((p) => p.isNotEmpty).toList();
     final target = Platform.isWindows ? normalized.toLowerCase() : normalized;
     final prefixes = Platform.isWindows

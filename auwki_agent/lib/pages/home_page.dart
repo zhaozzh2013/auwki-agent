@@ -34,6 +34,7 @@ class _HomePageState extends State<HomePage> {
   _ActiveIdListenable? _activeListenable;
   ChatStore? _store;
   String? _workspaceDir;
+  bool _inspectorOpen = false;
 
   String? _greeting;
   String? _greetingForConvId;
@@ -104,7 +105,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final store = AppState.chatOf(context);
     final settings = AppState.settingsOf(context);
-    final showInspector = MediaQuery.sizeOf(context).width >= 1180;
+    final wide = MediaQuery.sizeOf(context).width >= 1180;
     final isFlagship = _thinking == ThinkingLevel.flagship;
     AppColors.palette = isFlagship
         ? (settings.theme == AppTheme.dark
@@ -114,86 +115,123 @@ class _HomePageState extends State<HomePage> {
               ? AppPalette.dark
               : AppPalette.light);
 
-    final content = Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Sidebar(accent: _accent),
-        Expanded(
-          child: ValueListenableBuilder<String?>(
-            valueListenable: _activeListenable!,
-            builder: (context, activeId, _) {
-              final greeting = _resolveGreeting(activeId);
-              if (activeId == null) {
-                return _EmptyHome(
-                  accent: _accent,
-                  accentSoft: _accentSoft,
-                  mode: _mode,
-                  thinking: _thinking,
-                  workspaceDir: _workspaceDir,
-                  onModeChanged: (m) => setState(() => _mode = m),
-                  onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) =>
-                      setState(() => _workspaceDir = v),
-                  greeting: greeting,
-                );
-              }
-              Conversation? conv;
-              for (final c in store.conversations) {
-                if (c.id == activeId) {
-                  conv = c;
-                  break;
-                }
-              }
-              if (conv == null) {
-                return _EmptyHome(
-                  accent: _accent,
-                  accentSoft: _accentSoft,
-                  mode: _mode,
-                  thinking: _thinking,
-                  workspaceDir: _workspaceDir,
-                  onModeChanged: (m) => setState(() => _mode = m),
-                  onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) =>
-                      setState(() => _workspaceDir = v),
-                  greeting: greeting,
-                );
-              }
-              return ChatView(
-                conversation: conv,
-                mode: _mode,
-                thinking: _thinking,
-                accent: _accent,
-                accentSoft: _accentSoft,
-                onModeChanged: (m) => setState(() => _mode = m),
-                onThinkingChanged: (t) => setState(() => _thinking = t),
-                greeting: greeting,
-              );
-            },
-          ),
-        ),
-        if (showInspector)
-          ValueListenableBuilder<String?>(
-            valueListenable: _activeListenable!,
-            builder: (context, activeId, _) {
-              Conversation? conv;
-              if (activeId != null) {
-                for (final c in store.conversations) {
-                  if (c.id == activeId) {
-                    conv = c;
-                    break;
-                  }
-                }
-              }
-              return _InspectorPanel(
-                conversation: conv,
-                mode: _mode,
-                thinking: _thinking,
-                accent: _accent,
-              );
-            },
-          ),
-      ],
+    final chatArea = Expanded(
+      child: ValueListenableBuilder<String?>(
+        valueListenable: _activeListenable!,
+        builder: (context, activeId, _) {
+          final greeting = _resolveGreeting(activeId);
+          if (activeId == null) {
+            return _EmptyHome(
+              accent: _accent,
+              accentSoft: _accentSoft,
+              mode: _mode,
+              thinking: _thinking,
+              workspaceDir: _workspaceDir,
+              onModeChanged: (m) => setState(() => _mode = m),
+              onThinkingChanged: (t) => setState(() => _thinking = t),
+              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+              greeting: greeting,
+            );
+          }
+          Conversation? conv;
+          for (final c in store.conversations) {
+            if (c.id == activeId) {
+              conv = c;
+              break;
+            }
+          }
+          if (conv == null) {
+            return _EmptyHome(
+              accent: _accent,
+              accentSoft: _accentSoft,
+              mode: _mode,
+              thinking: _thinking,
+              workspaceDir: _workspaceDir,
+              onModeChanged: (m) => setState(() => _mode = m),
+              onThinkingChanged: (t) => setState(() => _thinking = t),
+              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+              greeting: greeting,
+            );
+          }
+          return ChatView(
+            conversation: conv,
+            mode: _mode,
+            thinking: _thinking,
+            accent: _accent,
+            accentSoft: _accentSoft,
+            onModeChanged: (m) => setState(() => _mode = m),
+            onThinkingChanged: (t) => setState(() => _thinking = t),
+            greeting: greeting,
+          );
+        },
+      ),
     );
+
+    final inspector = ValueListenableBuilder<String?>(
+      valueListenable: _activeListenable!,
+      builder: (context, activeId, _) {
+        Conversation? conv;
+        if (activeId != null) {
+          for (final c in store.conversations) {
+            if (c.id == activeId) {
+              conv = c;
+              break;
+            }
+          }
+        }
+        return _InspectorPanel(
+          conversation: conv,
+          mode: _mode,
+          thinking: _thinking,
+          accent: _accent,
+          onClose: wide
+              ? null
+              : () => setState(() => _inspectorOpen = false),
+        );
+      },
+    );
+
+    final Widget content;
+    if (wide) {
+      content = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Sidebar(accent: _accent),
+          chatArea,
+          inspector,
+        ],
+      );
+    } else {
+      content = Stack(
+        children: [
+          Positioned.fill(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Sidebar(
+                  accent: _accent,
+                  showInspectorButton: true,
+                  onToggleInspector: () =>
+                      setState(() => _inspectorOpen = !_inspectorOpen),
+                ),
+                chatArea,
+              ],
+            ),
+          ),
+          if (_inspectorOpen)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: Material(
+                elevation: 12,
+                color: AppColors.surface,
+                child: inspector,
+              ),
+            ),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -281,12 +319,14 @@ class _InspectorPanel extends StatefulWidget {
     required this.mode,
     required this.thinking,
     required this.accent,
+    this.onClose,
   });
 
   final Conversation? conversation;
   final WorkMode mode;
   final ThinkingLevel thinking;
   final Color accent;
+  final VoidCallback? onClose;
 
   @override
   State<_InspectorPanel> createState() => _InspectorPanelState();
@@ -339,6 +379,19 @@ class _InspectorPanelState extends State<_InspectorPanel> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  if (widget.onClose != null) ...[
+                    const Spacer(),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: widget.onClose,
+                      icon: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      tooltip: I18n.t('inspector.close'),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -1489,10 +1542,10 @@ class _ToolBubbleState extends State<_ToolBubble> {
                         ],
                       ],
                     ),
-                    if (m.toolArgs != null && m.toolArgs!.isNotEmpty) ...[
+                    if (_visibleToolContent(m).isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        _truncate(m.toolArgs!, 140),
+                        _truncate(_visibleToolContent(m), 140),
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 11,
@@ -1532,6 +1585,13 @@ class _ToolBubbleState extends State<_ToolBubble> {
         ),
       ),
     );
+  }
+
+  /// 子代理气泡显示思维链（text）；普通工具气泡显示参数行。
+  String _visibleToolContent(Message m) {
+    final isAgent = m.toolName?.startsWith('agent.') == true;
+    if (isAgent && m.text.trim().isNotEmpty) return m.text;
+    return m.toolArgs ?? '';
   }
 }
 

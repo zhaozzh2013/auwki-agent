@@ -381,47 +381,67 @@ class _ChatInputState extends State<ChatInput> {
                 toolRunning: true,
               ),
             );
-            final subRaw = StringBuffer();
             var lastSubVisible = '';
             try {
-              await _collectStream(
-                cancel,
-                client.chatStream(
-                  ChatRequest(
-                    system: subSystem,
-                    messages: currentHistory,
-                    model: settings.model,
-                    maxTokens: subAgentMaxTokens,
+              // 子代理拥有自己的思维链，并且可以调用工具（command 除外）；
+              // 主协调把任务像用户消息一样下发给它。
+              final outcome = await AgentRunner.runFlagshipAgent(
+                chat: (system, messages) => _cancellable(
+                  client.chatStream(
+                    ChatRequest(
+                      system: system,
+                      messages: messages,
+                      model: settings.model,
+                      maxTokens: subAgentMaxTokens,
+                    ),
                   ),
+                  cancel,
                 ),
-                (chunk) {
-                  subRaw.write(chunk);
-                  final visible = subRaw.toString();
-                  if (_shouldUpdateStreamUi(subMsgId, visible, lastSubVisible)) {
-                    lastSubVisible = visible;
-                    store.updateMessage(
-                      convId,
-                      subMsgId,
-                      visible,
-                      persist: false,
-                    );
+                systemPrompt: subSystem,
+                messages: [
+                  ...currentHistory,
+                  {
+                    'role': 'user',
+                    'content': AgentRunner.flagshipAgentTaskMessage(
+                      focus: focus,
+                      coordinatorNote: plan.coordinatorNote,
+                      isEnglish: isEnglish,
+                    ),
+                  },
+                ],
+                cwd: workspace,
+                onThinking: (text) {
+                  if (!_shouldUpdateStreamUi(subMsgId, text, lastSubVisible)) {
+                    return;
                   }
+                  lastSubVisible = text;
+                  store.updateMessage(
+                    convId,
+                    subMsgId,
+                    text,
+                    persist: false,
+                  );
                 },
               );
-              final result = CollaborativeAgentResult(
-                agent: agent,
-                output: subRaw.toString(),
-              );
-              if (result.output != lastSubVisible) {
+              final body = <String>[
+                if (outcome.output.trim().isNotEmpty) outcome.output.trim(),
+                if (outcome.toolTrace.trim().isNotEmpty)
+                  '\n[工具使用]\n${outcome.toolTrace.trim()}',
+              ].join('\n');
+              if (outcome.thinking != lastSubVisible) {
                 store.updateMessage(
                   convId,
                   subMsgId,
-                  result.output,
+                  outcome.thinking,
                   persist: false,
                 );
               }
-              store.finishToolMessage(convId, subMsgId, result.output, true);
-              return result;
+              store.finishToolMessage(convId, subMsgId, body, outcome.ok);
+              return CollaborativeAgentResult(
+                agent: agent,
+                output: body,
+                error: outcome.error,
+              );
             } catch (e) {
               final result = CollaborativeAgentResult(
                 agent: agent,
@@ -441,6 +461,20 @@ class _ChatInputState extends State<ChatInput> {
           final roundResults = await Future.wait(plannedAgents.map(runAgent));
           allResults.addAll(roundResults);
           if (cancel.isCompleted) break;
+
+          // 所有子代理都失败或没有产出：不再空转第二轮，直接进入综合。
+          final allFailed = roundResults.every(
+            (r) => !r.ok || r.output.trim().isEmpty,
+          );
+          if (allFailed) {
+            plan = FlagshipAgentPlan(
+              items: const [],
+              coordinatorNote: '',
+              complete: true,
+              finalInstruction: '',
+            );
+            break;
+          }
 
           try {
             plan = await AgentRunner.planFlagshipRound(
@@ -462,6 +496,14 @@ class _ChatInputState extends State<ChatInput> {
             );
           } on TimeoutException {
             // 主协调综合超时：视为本轮信息已足够，直接进入最终综合。
+            plan = FlagshipAgentPlan(
+              items: const [],
+              coordinatorNote: '',
+              complete: true,
+              finalInstruction: '',
+            );
+          } catch (_) {
+            // 主协调规划异常（如流错误）：同样按“信息已足够”收尾，避免卡死。
             plan = FlagshipAgentPlan(
               items: const [],
               coordinatorNote: '',

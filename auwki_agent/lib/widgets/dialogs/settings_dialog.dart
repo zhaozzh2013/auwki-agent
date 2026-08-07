@@ -86,13 +86,13 @@ class _SettingsFormState extends State<_SettingsForm> {
           children: [
             _label(I18n.t('settings.provider')),
             DropdownButton<String>(
-              value: s.provider.kind.name,
+              value: s.providerId,
               isExpanded: true,
               dropdownColor: AppColors.surfaceAlt,
               style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
               items: [
-                for (final p in kProviders)
-                  DropdownMenuItem(value: p.kind.name, child: Text(p.label)),
+                for (final (id, label) in s.providerChoices)
+                  DropdownMenuItem(value: id, child: Text(label)),
               ],
               onChanged: (v) async {
                 if (v != null) {
@@ -156,6 +156,62 @@ class _SettingsFormState extends State<_SettingsForm> {
                 ),
                 focusedBorder: UnderlineInputBorder(
                   borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            _label(I18n.t('settings.custom_provider')),
+            for (final (id, name)
+                in s.providerChoices.skip(kProviders.length))
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.only(left: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.dns_outlined,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => s.removeCustomProvider(id),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 15,
+                        color: Colors.redAccent,
+                      ),
+                      tooltip: I18n.t('settings.custom_provider.delete'),
+                    ),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _addCustomProvider(context, s),
+                icon: const Icon(Icons.add_link, size: 15),
+                label: Text(I18n.t('settings.custom_provider.add')),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  textStyle: const TextStyle(fontSize: 12.5),
                 ),
               ),
             ),
@@ -358,6 +414,150 @@ class _SettingsFormState extends State<_SettingsForm> {
     if (restart == true && mounted) {
       await AppRestarter.restart();
     }
+  }
+
+  Future<void> _addCustomProvider(
+    BuildContext context,
+    SettingsStore s,
+  ) async {
+    final name = TextEditingController();
+    final base = TextEditingController();
+    final models = TextEditingController();
+    var style = ApiStyle.openai;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text(
+            I18n.t('settings.custom_provider.add'),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
+          ),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: name,
+                    autofocus: true,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: I18n.t('settings.custom_provider.name'),
+                      labelStyle: TextStyle(color: AppColors.textSecondary),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: base,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: I18n.t('settings.custom_provider.base_url'),
+                      hintText: 'https://api.example.com/v1',
+                      hintStyle: TextStyle(color: AppColors.textTertiary),
+                      labelStyle: TextStyle(color: AppColors.textSecondary),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: models,
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: I18n.t('settings.custom_provider.models'),
+                      hintText: 'model-a, model-b',
+                      hintStyle: TextStyle(color: AppColors.textTertiary),
+                      labelStyle: TextStyle(color: AppColors.textSecondary),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: AppColors.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _label(I18n.t('settings.custom_provider.api_style')),
+                  _segRow(
+                    options: [
+                      (
+                        'openai',
+                        I18n.t('settings.custom_provider.api_style.openai'),
+                      ),
+                      (
+                        'anthropic',
+                        I18n.t('settings.custom_provider.api_style.anthropic'),
+                      ),
+                    ],
+                    current: style.name,
+                    onSelect: (v) => setLocal(
+                      () => style = v == 'anthropic'
+                          ? ApiStyle.anthropic
+                          : ApiStyle.openai,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                I18n.t('git.cancel'),
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              child: Text(I18n.t('dialog.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      await s.addCustomProvider(
+        name: name.text,
+        baseUrl: base.text,
+        apiStyle: style,
+        models: models.text
+            .split(RegExp(r'[,，]'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList(),
+      );
+    }
+    name.dispose();
+    base.dispose();
+    models.dispose();
   }
 
   Future<void> _createBackup() async {

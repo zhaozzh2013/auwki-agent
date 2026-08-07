@@ -17,9 +17,11 @@ class SettingsStore extends ChangeNotifier {
   }
 
   ProviderConfig _provider = kProviders.first;
+  String _providerId = kProviders.first.kind.name;
   String _model = kProviders.first.defaultModel;
   String _apiKey = '';
   String _baseUrl = kProviders.first.baseUrl;
+  final List<Map<String, dynamic>> _customProviders = [];
   AppTheme _theme = AppTheme.dark;
   String _userName = I18n.t('sidebar.user');
   String _userInitial = I18n.t('profile.initial.default');
@@ -32,6 +34,7 @@ class SettingsStore extends ChangeNotifier {
   bool get isReady => _ready;
 
   ProviderConfig get provider => _provider;
+  String get providerId => _providerId;
   String get model => _model;
   String get apiKey => _apiKey;
   String get baseUrl => _baseUrl;
@@ -46,6 +49,46 @@ class SettingsStore extends ChangeNotifier {
   AiClient get client =>
       AiClient(config: _provider.withBaseUrl(_baseUrl), apiKey: _apiKey);
 
+  List<ProviderConfig> get customProviderConfigs =>
+      [for (final m in _customProviders) _configFromMap(m)];
+
+  List<ProviderConfig> get allProviders =>
+      [...kProviders, ...customProviderConfigs];
+
+  /// 下拉选择项：(id, 显示名)。内置用 kind.name，自定义用存储 id。
+  List<(String, String)> get providerChoices => [
+    for (final p in kProviders) (p.kind.name, p.label),
+    for (final m in _customProviders)
+      ((m['id'] ?? '').toString(), (m['name'] ?? '自定义').toString()),
+  ];
+
+  ProviderConfig _configFromMap(Map<String, dynamic> m) {
+    final models = ((m['models'] as List?) ?? const [])
+        .whereType<String>()
+        .toList();
+    return providerFromSeed(
+      CustomProviderSeed(
+        id: (m['id'] ?? '').toString(),
+        name: (m['name'] ?? '自定义').toString(),
+        baseUrl: (m['baseUrl'] ?? '').toString(),
+        apiStyle: (m['apiStyle'] ?? 'openai').toString() == 'anthropic'
+            ? ApiStyle.anthropic
+            : ApiStyle.openai,
+        models: models,
+      ),
+    );
+  }
+
+  ProviderConfig _resolveProvider(String id) {
+    for (final p in kProviders) {
+      if (p.kind.name == id) return p;
+    }
+    for (final m in _customProviders) {
+      if ((m['id'] ?? '').toString() == id) return _configFromMap(m);
+    }
+    return kProviders.first;
+  }
+
   Future<File> _file() async {
     final dir = await getApplicationSupportDirectory();
     return File('${dir.path}/settings.json');
@@ -57,8 +100,19 @@ class SettingsStore extends ChangeNotifier {
       if (await f.exists()) {
         final raw = await f.readAsString();
         final m = jsonDecode(raw) as Map<String, dynamic>;
+        final customRaw = (m['customProviders'] as List?) ?? const [];
+        _customProviders
+          ..clear()
+          ..addAll(
+            customRaw
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e)),
+          );
         final pid = m['provider'] as String?;
-        if (pid != null) _provider = providerById(pid);
+        if (pid != null && pid.isNotEmpty) {
+          _provider = _resolveProvider(pid);
+          _providerId = pid;
+        }
         final mid = m['model'] as String?;
         if (mid != null && _provider.models.any((x) => x.id == mid)) {
           _model = mid;
@@ -116,15 +170,54 @@ class SettingsStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> setProvider(String kindName) async {
-    _provider = providerById(kindName);
+  Future<void> setProvider(String id) async {
+    _provider = _resolveProvider(id);
+    _providerId = id;
     if (!_provider.models.any((m) => m.id == _model)) {
       _model = _provider.defaultModel;
     }
     _baseUrl = _provider.baseUrl;
     notifyListeners();
     await _save({
-      'provider': _provider.kind.name,
+      'provider': _providerId,
+      'model': _model,
+      'baseUrl': _baseUrl,
+    });
+  }
+
+  Future<void> addCustomProvider({
+    required String name,
+    required String baseUrl,
+    required ApiStyle apiStyle,
+    required List<String> models,
+  }) async {
+    final id = 'custom_${DateTime.now().microsecondsSinceEpoch}';
+    _customProviders.add({
+      'id': id,
+      'name': name.trim(),
+      'baseUrl': baseUrl.trim(),
+      'apiStyle': apiStyle.name,
+      'models': models
+          .map((m) => m.trim())
+          .where((m) => m.isNotEmpty)
+          .toList(),
+    });
+    notifyListeners();
+    await _save({'customProviders': _customProviders});
+  }
+
+  Future<void> removeCustomProvider(String id) async {
+    _customProviders.removeWhere((m) => (m['id'] ?? '') == id);
+    if (_providerId == id) {
+      _provider = kProviders.first;
+      _providerId = kProviders.first.kind.name;
+      _model = _provider.defaultModel;
+      _baseUrl = _provider.baseUrl;
+    }
+    notifyListeners();
+    await _save({
+      'customProviders': _customProviders,
+      'provider': _providerId,
       'model': _model,
       'baseUrl': _baseUrl,
     });

@@ -11,9 +11,18 @@ import 'dialogs/conv_menu.dart';
 import 'dialogs/main_menu.dart';
 
 class Sidebar extends StatefulWidget {
-  const Sidebar({super.key, this.accent});
+  const Sidebar({
+    super.key,
+    this.accent,
+    this.showInspectorButton = false,
+    this.onToggleInspector,
+  });
 
   final Color? accent;
+
+  /// 窄屏下显示“打开右侧面板”的开关按钮。
+  final bool showInspectorButton;
+  final VoidCallback? onToggleInspector;
 
   @override
   State<Sidebar> createState() => _SidebarState();
@@ -134,6 +143,14 @@ class _SidebarState extends State<Sidebar> {
               ),
             ),
             const SizedBox(width: 6),
+            if (widget.showInspectorButton) ...[
+              _SquareIconButton(
+                icon: Icons.dashboard_customize_outlined,
+                tooltip: 'Inspector',
+                onTap: widget.onToggleInspector ?? () {},
+              ),
+              const SizedBox(width: 4),
+            ],
             Builder(
               builder: (buttonContext) => _SquareIconButton(
                 icon: Icons.menu,
