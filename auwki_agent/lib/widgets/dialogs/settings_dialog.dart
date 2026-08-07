@@ -239,6 +239,7 @@ class _SettingsFormState extends State<_SettingsForm> {
               options: [
                 ('dark', I18n.t('settings.theme.dark')),
                 ('light', I18n.t('settings.theme.light')),
+                ('system', I18n.t('settings.theme.system')),
               ],
               current: s.theme.name,
               onSelect: (v) => _onThemeSelected(

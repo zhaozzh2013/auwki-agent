@@ -425,6 +425,69 @@ class _ChatInputState extends State<ChatInput> {
                   },
                 ],
                 cwd: workspace,
+                onCommandRequest: (command) async {
+                  if (!mounted) return false;
+                  final allow = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: AppColors.surface,
+                      title: Text(
+                        I18n.t('dialog.subagent_command.title'),
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                        ),
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            I18n.t('dialog.subagent_command.body'),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.bg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Text(
+                              command,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(
+                            I18n.t('dialog.command.deny'),
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                          ),
+                          child: Text(I18n.t('dialog.command.allow')),
+                        ),
+                      ],
+                    ),
+                  );
+                  return allow == true;
+                },
                 onThinking: (text) {
                   if (!_shouldUpdateStreamUi(subMsgId, text, lastSubVisible)) {
                     return;
@@ -570,7 +633,7 @@ class _ChatInputState extends State<ChatInput> {
         final req = ChatRequest(
           system: systemPrompt,
           messages: currentHistory,
-          model: settings.model,
+          model: _modelFor(widget.thinking),
           maxTokens: finalMaxTokens,
         );
         final rawAcc = StringBuffer();
@@ -843,6 +906,26 @@ class _ChatInputState extends State<ChatInput> {
       r'change_model\s*\(\s*work\s*\)',
       caseSensitive: false,
     ).hasMatch(text);
+  }
+
+  /// 模型自动路由：Fast 档优先使用轻量模型（mini/flash/haiku 等）。
+  String _modelFor(ThinkingLevel level) {
+    final s = AppState.settingsOf(context);
+    if (level == ThinkingLevel.fast) {
+      for (final m in s.provider.models) {
+        if (_isCheapModel(m.id)) return m.id;
+      }
+    }
+    return s.model;
+  }
+
+  bool _isCheapModel(String id) {
+    final lower = id.toLowerCase();
+    return lower.contains('mini') ||
+        lower.contains('flash') ||
+        lower.contains('haiku') ||
+        lower.contains('highspeed') ||
+        lower.contains('lite');
   }
 
   /// PLAN 模式下，若模型输出以 `change_model(work)` 开头，自动切到 WORK。

@@ -84,7 +84,10 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       child: AnimatedBuilder(
         animation: Listenable.merge([_store, _settings, I18n.locale]),
         builder: (context, _) {
-          final isDark = _settings.theme == AppTheme.dark;
+          final systemDark =
+              MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+          final isDark = _settings.theme == AppTheme.dark ||
+              (_settings.theme == AppTheme.system && systemDark);
           final palette = isDark ? AppPalette.dark : AppPalette.light;
           AppColors.palette = palette;
           return MaterialApp(

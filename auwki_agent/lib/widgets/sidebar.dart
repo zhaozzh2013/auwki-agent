@@ -144,6 +144,12 @@ class _SidebarState extends State<Sidebar> {
               ),
             ),
             const SizedBox(width: 6),
+            _SquareIconButton(
+              icon: Icons.search,
+              tooltip: I18n.t('search.title'),
+              onTap: () => _showSearchDialog(context, AppState.chatOf(context)),
+            ),
+            const SizedBox(width: 4),
             if (widget.showInspectorButton) ...[
               _SquareIconButton(
                 icon: Icons.dashboard_customize_outlined,
@@ -205,8 +211,30 @@ class _SidebarState extends State<Sidebar> {
     final pinned = store.pinned;
     final topLevel = store.topLevel;
     final folders = store.folders;
+    final starred = store.starredConversations;
 
     final staticSlivers = <Widget>[
+      if (starred.isNotEmpty) ...[
+        SliverToBoxAdapter(
+          child: _SectionHeader(label: I18n.t('sidebar.section.starred')),
+        ),
+        for (final c in starred)
+          SliverToBoxAdapter(
+            child: _ConvRow(
+              key: ValueKey('star_${c.id}'),
+              keyStr: 'star_${c.id}',
+              conv: c,
+              accent: _accent,
+              hoveredKey: _hoveredKey,
+              onHover: (k) => setState(() => _hoveredKey = k),
+              isActive: store.activeId == c.id,
+              onTap: () => store.activate(c.id),
+              onMenu: (offset) => _showConvMenu(context, c, offset),
+              onClaimRightClick: _claimItemRightClick,
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+      ],
       if (pinned.isNotEmpty) ...[
         SliverToBoxAdapter(
           child: _SectionHeader(label: I18n.t('sidebar.section.pinned')),
@@ -457,6 +485,108 @@ class _SidebarState extends State<Sidebar> {
     Conversation c,
   ) async {
     await ExportService.exportConversation(context, c);
+  }
+
+  Future<void> _showSearchDialog(
+    BuildContext context,
+    ChatStore store,
+  ) async {
+    final controller = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final results = store.searchMessages(controller.text);
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: TextField(
+              controller: controller,
+              autofocus: true,
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: I18n.t('search.hint'),
+                hintStyle: TextStyle(color: AppColors.textTertiary),
+                prefixIcon: Icon(
+                  Icons.search,
+                  color: AppColors.textSecondary,
+                ),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+              onChanged: (_) => setLocal(() {}),
+              onSubmitted: (_) {
+                if (results.isNotEmpty) {
+                  store.activate(results.first.$1.id);
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+            content: SizedBox(
+              width: 440,
+              height: 380,
+              child: results.isEmpty
+                  ? Center(
+                      child: Text(
+                        controller.text.trim().isEmpty
+                            ? I18n.t('search.empty')
+                            : I18n.t('search.no_result'),
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: results.length,
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 1, color: AppColors.border),
+                      itemBuilder: (ctx, i) {
+                        final (c, m) = results[i];
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            m.starred
+                                ? Icons.star
+                                : Icons.chat_bubble_outline,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          title: Text(
+                            c.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            m.text.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          onTap: () {
+                            store.activate(c.id);
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+    controller.dispose();
   }
 
   Future<void> _showFolderMenu(

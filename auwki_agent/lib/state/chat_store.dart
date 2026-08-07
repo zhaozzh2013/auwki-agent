@@ -33,6 +33,10 @@ class ChatStore extends ChangeNotifier {
   List<Conversation> get topLevel =>
       _conversations.where((c) => !c.pinned && c.folderId == null).toList();
 
+  /// 包含收藏消息的对话（用于侧边栏“收藏”区）。
+  List<Conversation> get starredConversations =>
+      _conversations.where((c) => c.messages.any((m) => m.starred)).toList();
+
   List<Conversation> inFolder(String folderId) =>
       _conversations.where((c) => c.folderId == folderId).toList();
 
@@ -323,6 +327,44 @@ class ChatStore extends ChangeNotifier {
     c.updatedAt = DateTime.now();
     notifyListeners();
     _scheduleSave();
+  }
+
+  void toggleStar(String convId, String msgId) {
+    final c = _byId(convId);
+    if (c == null) return;
+    final i = c.messages.indexWhere((m) => m.id == msgId);
+    if (i < 0) return;
+    final m = c.messages[i];
+    c.messages[i] = Message(
+      id: m.id,
+      sender: m.sender,
+      text: m.text,
+      attachments: m.attachments,
+      toolName: m.toolName,
+      toolArgs: m.toolArgs,
+      toolResult: m.toolResult,
+      toolOk: m.toolOk,
+      toolRunning: m.toolRunning,
+      starred: !m.starred,
+      createdAt: m.createdAt,
+    );
+    notifyListeners();
+    _scheduleSave();
+  }
+
+  /// 全文搜索：匹配消息正文、工具参数与工具结果。
+  List<(Conversation, Message)> searchMessages(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    final out = <(Conversation, Message)>[];
+    for (final c in _conversations) {
+      for (final m in c.messages) {
+        final hay = '${m.text}\n${m.toolArgs ?? ''}\n${m.toolResult ?? ''}'
+            .toLowerCase();
+        if (hay.contains(q)) out.add((c, m));
+      }
+    }
+    return out;
   }
 
   void updateMessage(

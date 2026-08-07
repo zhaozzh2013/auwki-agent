@@ -1276,6 +1276,15 @@ class _ChatViewState extends State<ChatView> {
                           onRegenerate: message.sender == Sender.user
                               ? () => widget.onRegenerate(conv.id, message.id)
                               : null,
+                          starred: message.starred,
+                          onToggleStar:
+                              (message.sender == Sender.user ||
+                                      message.sender == Sender.assistant)
+                                  ? () => AppState.chatOf(context).toggleStar(
+                                        conv.id,
+                                        message.id,
+                                      )
+                                  : null,
                         ),
                       ),
                     );
@@ -1310,6 +1319,8 @@ class _MessageBubble extends StatelessWidget {
     required this.palette,
     this.onEdit,
     this.onRegenerate,
+    this.starred = false,
+    this.onToggleStar,
   });
 
   final Message message;
@@ -1317,6 +1328,8 @@ class _MessageBubble extends StatelessWidget {
   final AppPalette palette;
   final ValueChanged<String>? onEdit;
   final VoidCallback? onRegenerate;
+  final bool starred;
+  final VoidCallback? onToggleStar;
 
   void _copyMessage(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.text));
@@ -1458,6 +1471,13 @@ class _MessageBubble extends StatelessWidget {
                       Icons.refresh,
                       I18n.t('chat.regenerate'),
                       onRegenerate!,
+                    ),
+                  if (onToggleStar != null)
+                    _smallIcon(
+                      context,
+                      starred ? Icons.star : Icons.star_border,
+                      I18n.t('chat.star'),
+                      onToggleStar!,
                     ),
                 ],
               ),

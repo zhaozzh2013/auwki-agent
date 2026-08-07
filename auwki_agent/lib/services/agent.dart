@@ -367,6 +367,7 @@ Think step by step (chain of thought). Use tools when needed. End with a concise
     String? cwd,
     int maxTurns = 3,
     void Function(String thinking)? onThinking,
+    Future<bool> Function(String command)? onCommandRequest,
   }) async {
     final thinking = StringBuffer();
     final trace = <String>[];
@@ -395,12 +396,22 @@ Think step by step (chain of thought). Use tools when needed. End with a concise
       final results = <String>[];
       for (final call in calls) {
         if (call.tool == 'command') {
-          final blocked = I18n.t(
-            'agent.error.subagent_command_blocked',
-            {'command': call.args},
-          );
-          trace.add(blocked);
-          results.add(blocked);
+          final allow = onCommandRequest == null
+              ? false
+              : await onCommandRequest(call.args);
+          if (!allow) {
+            final blocked = I18n.t(
+              'agent.error.subagent_command_blocked',
+              {'command': call.args},
+            );
+            trace.add(blocked);
+            results.add(blocked);
+            continue;
+          }
+          final r = await execute(call, cwd: cwd);
+          final detail = r.error ?? r.output;
+          trace.add('${r.call.display}\n$detail');
+          results.add('${r.call.display}\n$detail');
           continue;
         }
         final r = await execute(call, cwd: cwd);

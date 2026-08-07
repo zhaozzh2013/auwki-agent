@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../i18n/strings.dart';
 import 'ai_providers.dart';
 
-enum AppTheme { dark, light }
+enum AppTheme { dark, light, system }
 
 enum CostMode { poor, medium, max }
 
