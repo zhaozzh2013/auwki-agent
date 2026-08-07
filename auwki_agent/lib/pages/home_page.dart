@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,17 +10,21 @@ import '../app_state.dart';
 import '../i18n/strings.dart';
 import '../models/models.dart';
 import '../services/settings_store.dart';
+import '../services/command_palette.dart';
+import '../services/export_service.dart';
 import '../services/workspace_manager.dart';
 import '../state/chat_store.dart';
 import '../theme.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/inspector/browser_panel.dart';
+import '../widgets/inspector/file_tree_panel.dart';
 import '../widgets/inspector/git_panel.dart';
 import '../widgets/inspector/round_changes_panel.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/thinking_slider.dart';
 import '../widgets/dialogs/settings_dialog.dart';
+import '../pages/profile_page.dart';
 import '../work_mode.dart';
 
 class HomePage extends StatefulWidget {
@@ -36,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   ChatStore? _store;
   String? _workspaceDir;
   bool _inspectorOpen = false;
+  final ValueNotifier<String?> _regenerateDraft = ValueNotifier<String?>(null);
 
   String? _greeting;
   String? _greetingForConvId;
@@ -64,7 +70,117 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _activeListenable?.dispose();
     _store?.removeListener(_onStoreChange);
+    _regenerateDraft.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _handlePaletteShortcut(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (HardwareKeyboard.instance.isControlPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyK) {
+      _openCommandPalette();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _requestRegenerate(String convId, String userMsgId) {
+    final store = AppState.chatOf(context);
+    String? text;
+    for (final c in store.conversations) {
+      if (c.id == convId) {
+        for (final m in c.messages) {
+          if (m.id == userMsgId && m.sender == Sender.user) {
+            text = m.text;
+            break;
+          }
+        }
+        break;
+      }
+    }
+    if (text == null || text.trim().isEmpty) return;
+    store.regenerateFrom(convId, userMsgId);
+    _regenerateDraft.value = text;
+  }
+
+  void _openCommandPalette() {
+    final store = AppState.chatOf(context);
+    final settings = AppState.settingsOf(context);
+    final conv = store.active;
+    final actions = <PaletteAction>[
+      PaletteAction(
+        icon: Icons.add_comment_outlined,
+        label: I18n.t('palette.new_chat'),
+        keywords: ['new', 'chat', '对话'],
+        onTap: () {
+          final id = store.newConversation();
+          store.activate(id);
+        },
+      ),
+      PaletteAction(
+        icon: Icons.settings_outlined,
+        label: I18n.t('palette.settings'),
+        keywords: ['setting', '设置'],
+        onTap: () => showSettingsDialog(context),
+      ),
+      PaletteAction(
+        icon: Icons.person_outline,
+        label: I18n.t('palette.profile'),
+        keywords: ['profile', '个人'],
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const ProfilePage()),
+        ),
+      ),
+      PaletteAction(
+        icon: Icons.dark_mode_outlined,
+        label: I18n.t('palette.theme'),
+        keywords: ['theme', '主题'],
+        onTap: () => settings.setTheme(
+          settings.theme == AppTheme.dark
+              ? AppTheme.light
+              : AppTheme.dark,
+        ),
+      ),
+      PaletteAction(
+        icon: Icons.swap_horiz,
+        label: I18n.t('palette.mode'),
+        keywords: ['mode', 'plan', 'work', '模式'],
+        onTap: () => setState(
+          () => _mode = _mode == WorkMode.work ? WorkMode.plan : WorkMode.work,
+        ),
+      ),
+      PaletteAction(
+        icon: Icons.bolt_outlined,
+        label: I18n.t('palette.thinking'),
+        keywords: ['thinking', '思考'],
+        onTap: () => setState(() {
+          final values = ThinkingLevel.values;
+          _thinking = values[(values.indexOf(_thinking) + 1) % values.length];
+        }),
+      ),
+      if (conv != null)
+        PaletteAction(
+          icon: Icons.ios_share,
+          label: I18n.t('palette.export'),
+          keywords: ['export', '导出'],
+          onTap: () => ExportService.exportConversation(context, conv),
+        ),
+      if (conv != null)
+        PaletteAction(
+          icon: Icons.delete_sweep_outlined,
+          label: I18n.t('palette.clear'),
+          keywords: ['clear', '清空'],
+          onTap: () => store.clearMessages(conv.id),
+        ),
+      if (conv?.workspaceDir != null)
+        PaletteAction(
+          icon: Icons.folder_open,
+          label: I18n.t('palette.workspace'),
+          keywords: ['folder', 'workspace', '目录'],
+          onTap: () => Process.start('explorer', [conv!.workspaceDir!]),
+        ),
+    ];
+    showCommandPalette(context, actions: actions);
   }
 
   Color get _accent => _thinking == ThinkingLevel.flagship
@@ -130,9 +246,10 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-              greeting: greeting,
-            );
+                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+                  regenerateDraft: _regenerateDraft,
+                  greeting: greeting,
+                );
           }
           Conversation? conv;
           for (final c in store.conversations) {
@@ -150,9 +267,10 @@ class _HomePageState extends State<HomePage> {
               workspaceDir: _workspaceDir,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-              onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
-              greeting: greeting,
-            );
+                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
+                  regenerateDraft: _regenerateDraft,
+                  greeting: greeting,
+                );
           }
           return ChatView(
             conversation: conv,
@@ -162,6 +280,8 @@ class _HomePageState extends State<HomePage> {
             accentSoft: _accentSoft,
             onModeChanged: (m) => setState(() => _mode = m),
             onThinkingChanged: (t) => setState(() => _thinking = t),
+            onRegenerate: _requestRegenerate,
+            regenerateDraft: _regenerateDraft,
             greeting: greeting,
           );
         },
@@ -252,7 +372,11 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      body: _FlagshipShell(enabled: isFlagship, child: content),
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _handlePaletteShortcut,
+        child: _FlagshipShell(enabled: isFlagship, child: content),
+      ),
     );
   }
 }
@@ -433,10 +557,15 @@ class _InspectorPanelState extends State<_InspectorPanel> {
                   ),
                   1 => RoundChangesPanel(accent: widget.accent),
                   2 => BrowserPanel(accent: widget.accent),
-                  _ => GitPanel(
+                  3 => GitPanel(
                     accent: widget.accent,
                     workspacePath: conv?.workspaceDir,
                   ),
+                  4 => FileTreePanel(
+                    workspaceDir: conv?.workspaceDir,
+                    accent: widget.accent,
+                  ),
+                  _ => const SizedBox.shrink(),
                 },
               ),
             ],
@@ -465,6 +594,7 @@ class _TabBar extends StatelessWidget {
       (Icons.difference_outlined, I18n.t('inspector.tab.changes')),
       (Icons.public, I18n.t('inspector.tab.browser')),
       (Icons.alt_route, 'Git'),
+      (Icons.folder_outlined, I18n.t('inspector.tab.files')),
     ];
     return Container(
       padding: const EdgeInsets.all(3),
@@ -723,6 +853,7 @@ class _EmptyHome extends StatelessWidget {
     required this.mode,
     required this.thinking,
     required this.workspaceDir,
+    required this.regenerateDraft,
     required this.onModeChanged,
     required this.onThinkingChanged,
     required this.onWorkspaceChanged,
@@ -734,6 +865,7 @@ class _EmptyHome extends StatelessWidget {
   final WorkMode mode;
   final ThinkingLevel thinking;
   final String? workspaceDir;
+  final ValueNotifier<String?> regenerateDraft;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
   final ValueChanged<String?> onWorkspaceChanged;
@@ -774,6 +906,7 @@ class _EmptyHome extends StatelessWidget {
                       accent: accent,
                       accentSoft: accentSoft,
                       workspaceDir: workspaceDir,
+                      regenerateDraft: regenerateDraft,
                       onModeChanged: onModeChanged,
                       onThinkingChanged: onThinkingChanged,
                     ),
@@ -1010,6 +1143,8 @@ class ChatView extends StatefulWidget {
     required this.accentSoft,
     required this.onModeChanged,
     required this.onThinkingChanged,
+    required this.onRegenerate,
+    required this.regenerateDraft,
     required this.greeting,
   });
 
@@ -1020,6 +1155,8 @@ class ChatView extends StatefulWidget {
   final Color accentSoft;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
+  final void Function(String convId, String userMsgId) onRegenerate;
+  final ValueNotifier<String?> regenerateDraft;
   final String greeting;
 
   @override
@@ -1131,6 +1268,14 @@ class _ChatViewState extends State<ChatView> {
                           message: message,
                           accent: widget.accent,
                           palette: context.palette,
+                          onEdit: message.sender == Sender.user
+                              ? (newText) => AppState.chatOf(
+                                    context,
+                                  ).editUserMessage(conv.id, message.id, newText)
+                              : null,
+                          onRegenerate: message.sender == Sender.user
+                              ? () => widget.onRegenerate(conv.id, message.id)
+                              : null,
                         ),
                       ),
                     );
@@ -1148,6 +1293,7 @@ class _ChatViewState extends State<ChatView> {
                 onThinkingChanged: widget.onThinkingChanged,
                 conversationId: conv.id,
                 workspaceDir: conv.workspaceDir,
+                regenerateDraft: widget.regenerateDraft,
               ),
             ),
           ],
@@ -1162,11 +1308,15 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.accent,
     required this.palette,
+    this.onEdit,
+    this.onRegenerate,
   });
 
   final Message message;
   final Color accent;
   final AppPalette palette;
+  final ValueChanged<String>? onEdit;
+  final VoidCallback? onRegenerate;
 
   void _copyMessage(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.text));
@@ -1182,6 +1332,72 @@ class _MessageBubble extends StatelessWidget {
           duration: const Duration(seconds: 1),
         ),
       );
+  }
+
+  Future<void> _editMessage(BuildContext context) async {
+    final controller = TextEditingController(text: message.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(
+          I18n.t('chat.edit.title'),
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 8,
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+          decoration: InputDecoration(
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.primary),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              I18n.t('git.cancel'),
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            child: Text(I18n.t('dialog.save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result.trim().isNotEmpty) {
+      onEdit?.call(result.trim());
+    }
+  }
+
+  Widget _smallIcon(
+    BuildContext context,
+    IconData icon,
+    String tooltip,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Tooltip(
+          message: tooltip,
+          child: Icon(icon, size: 12, color: AppColors.textTertiary),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1222,19 +1438,27 @@ class _MessageBubble extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () => _copyMessage(context),
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.copy,
-                        size: 11,
-                        color: AppColors.textTertiary,
-                      ),
-                    ),
+                  const SizedBox(width: 4),
+                  _smallIcon(
+                    context,
+                    Icons.copy,
+                    I18n.t('conv.copy'),
+                    () => _copyMessage(context),
                   ),
+                  if (onEdit != null)
+                    _smallIcon(
+                      context,
+                      Icons.edit_outlined,
+                      I18n.t('chat.edit'),
+                      () => _editMessage(context),
+                    ),
+                  if (onRegenerate != null)
+                    _smallIcon(
+                      context,
+                      Icons.refresh,
+                      I18n.t('chat.regenerate'),
+                      onRegenerate!,
+                    ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -1722,6 +1946,7 @@ class ControlsCard extends StatelessWidget {
     required this.accent,
     required this.accentSoft,
     this.workspaceDir,
+    this.regenerateDraft,
     required this.onModeChanged,
     required this.onThinkingChanged,
     this.conversationId,
@@ -1732,6 +1957,7 @@ class ControlsCard extends StatelessWidget {
   final Color accent;
   final Color accentSoft;
   final String? workspaceDir;
+  final ValueNotifier<String?>? regenerateDraft;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
   final String? conversationId;
@@ -1770,6 +1996,7 @@ class ControlsCard extends StatelessWidget {
             accentSoft: accentSoft,
             conversationId: conversationId,
             workspaceDir: workspaceDir,
+            regenerateDraft: regenerateDraft,
             onModeChanged: onModeChanged,
           ),
         ],

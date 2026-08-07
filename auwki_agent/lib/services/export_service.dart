@@ -1,9 +1,59 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+
 import '../i18n/strings.dart';
 import '../models/models.dart';
+import '../theme.dart';
 
 /// 把一条对话导出为 Markdown。
 class ExportService {
   ExportService._();
+
+  /// 弹出保存对话框导出对话为 Markdown，并提示结果。
+  static Future<void> exportConversation(
+    BuildContext context,
+    Conversation conv,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final md = conversationToMarkdown(conv);
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final stamp = '${now.year}${two(now.month)}${two(now.day)}';
+    final safeTitle = conv.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    try {
+      final path = await FilePicker.saveFile(
+        dialogTitle: I18n.t('conv.export'),
+        fileName: 'AUWKI-$safeTitle-$stamp.md',
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        bytes: utf8.encode(md),
+      );
+      if (path != null && path.isNotEmpty) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                I18n.t('conv.export.done', {'path': path}),
+                style: const TextStyle(fontSize: 12),
+              ),
+              backgroundColor: AppColors.surfaceAlt,
+            ),
+          );
+      }
+    } catch (_) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(I18n.t('conv.export.failed')),
+            backgroundColor: Colors.redAccent.shade700,
+          ),
+        );
+    }
+  }
 
   static String conversationToMarkdown(Conversation conv) {
     final buf = StringBuffer();

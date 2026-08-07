@@ -31,6 +31,7 @@ class ChatInput extends StatefulWidget {
     this.accentSoft,
     this.conversationId,
     this.workspaceDir,
+    this.regenerateDraft,
     this.onModeChanged,
   });
 
@@ -42,6 +43,9 @@ class ChatInput extends StatefulWidget {
 
   /// 新建对话时使用的工作空间目录；已有对话时传入对话已保存的目录。
   final String? workspaceDir;
+
+  /// 外部请求“重新生成”时填入的用户消息文本（由 HomePage 注入）。
+  final ValueNotifier<String?>? regenerateDraft;
 
   final ValueChanged<WorkMode>? onModeChanged;
 
@@ -64,14 +68,25 @@ class _ChatInputState extends State<ChatInput> {
   @override
   void initState() {
     super.initState();
+    widget.regenerateDraft?.addListener(_onRegenerateDraft);
     _controller.addListener(() {
       final v = _controller.text.trim().isNotEmpty;
       if (v != _hasText) setState(() => _hasText = v);
     });
   }
 
+  void _onRegenerateDraft() {
+    final draft = widget.regenerateDraft?.value;
+    if (draft == null || draft.trim().isEmpty) return;
+    widget.regenerateDraft?.value = null;
+    _controller.text = draft;
+    _focus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _send());
+  }
+
   @override
   void dispose() {
+    widget.regenerateDraft?.removeListener(_onRegenerateDraft);
     _controller.dispose();
     _focus.dispose();
     super.dispose();

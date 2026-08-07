@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -459,43 +456,7 @@ class _SidebarState extends State<Sidebar> {
     BuildContext context,
     Conversation c,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final md = ExportService.conversationToMarkdown(c);
-    final now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp = '${now.year}${two(now.month)}${two(now.day)}';
-    final safeTitle = c.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    try {
-      final path = await FilePicker.saveFile(
-        dialogTitle: I18n.t('conv.export'),
-        fileName: 'AUWKI-$safeTitle-$stamp.md',
-        type: FileType.custom,
-        allowedExtensions: ['md'],
-        bytes: utf8.encode(md),
-      );
-      if (path != null && path.isNotEmpty) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                I18n.t('conv.export.done', {'path': path}),
-                style: const TextStyle(fontSize: 12),
-              ),
-              backgroundColor: AppColors.surfaceAlt,
-            ),
-          );
-      }
-    } catch (_) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(I18n.t('conv.export.failed')),
-            backgroundColor: Colors.redAccent.shade700,
-          ),
-        );
-    }
+    await ExportService.exportConversation(context, c);
   }
 
   Future<void> _showFolderMenu(

@@ -273,7 +273,53 @@ class ChatStore extends ChangeNotifier {
   void addMessage(String convId, Message msg) {
     final c = _byId(convId);
     if (c == null) return;
+    // 会话自动命名：第一条用户消息作为标题。
+    if (c.messages.isEmpty &&
+        msg.sender == Sender.user &&
+        c.title == I18n.t('chat.empty')) {
+      final firstLine = msg.text.trim().split('\n').first.trim();
+      c.title = firstLine.length <= 20
+          ? firstLine
+          : '${firstLine.substring(0, 20)}…';
+    }
     c.messages.add(msg);
+    c.updatedAt = DateTime.now();
+    notifyListeners();
+    _scheduleSave();
+  }
+
+  /// 编辑一条用户消息，并丢弃其后所有消息（保证上下文一致）。
+  void editUserMessage(String convId, String msgId, String newText) {
+    final c = _byId(convId);
+    if (c == null) return;
+    final i = c.messages.indexWhere(
+      (m) => m.id == msgId && m.sender == Sender.user,
+    );
+    if (i < 0) return;
+    final text = newText.trim();
+    if (text.isEmpty || text == c.messages[i].text) return;
+    c.messages[i] = Message(
+      id: c.messages[i].id,
+      sender: Sender.user,
+      text: text,
+      attachments: c.messages[i].attachments,
+      createdAt: c.messages[i].createdAt,
+    );
+    c.messages.removeRange(i + 1, c.messages.length);
+    c.updatedAt = DateTime.now();
+    notifyListeners();
+    _scheduleSave();
+  }
+
+  /// 从指定用户消息开始重新生成：删除该消息及其后的所有内容。
+  void regenerateFrom(String convId, String msgId) {
+    final c = _byId(convId);
+    if (c == null) return;
+    final i = c.messages.indexWhere(
+      (m) => m.id == msgId && m.sender == Sender.user,
+    );
+    if (i < 0) return;
+    c.messages.removeRange(i, c.messages.length);
     c.updatedAt = DateTime.now();
     notifyListeners();
     _scheduleSave();
