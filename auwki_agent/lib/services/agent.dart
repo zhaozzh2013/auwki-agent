@@ -220,8 +220,8 @@ class AgentRunner {
   }
 
   /// 文本中是否存在工具调用块（即使块解析失败也返回 true）。
-  static bool hasToolBlock(String text) =>
-      text.contains('[正式输出]') || text.contains('[输出结束]');
+  /// 只认 `[正式输出]`，避免把 `[最后输出]...[输出结束]` 误判为工具块。
+  static bool hasToolBlock(String text) => text.contains('[正式输出]');
 
   static List<AgentToolCall> _parseCalls(
     String block,

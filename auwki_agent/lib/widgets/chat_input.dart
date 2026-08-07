@@ -684,8 +684,9 @@ class _ChatInputState extends State<ChatInput> {
             : AgentRunner.parse(rawText);
         final thinking = widget.thinking;
         if (calls.isEmpty &&
+            !isFinal &&
             thinking != ThinkingLevel.fast &&
-            AgentRunner.hasToolBlock(rawAcc.toString())) {
+            AgentRunner.hasToolBlock(rawText)) {
           // 有工具块但一个调用都没解析出来：显示错误并让模型重试一次，
           // 避免“模型以为写了文件、实际什么都没发生”的静默失败。
           final errMsgId =

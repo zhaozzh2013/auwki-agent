@@ -37,6 +37,10 @@ void main() {
   test('hasToolBlock 检测存在但解析失败的块', () {
     expect(AgentRunner.hasToolBlock('[正式输出] 格式坏了'), isTrue);
     expect(AgentRunner.hasToolBlock('普通文本'), isFalse);
+    expect(
+      AgentRunner.hasToolBlock('[最后输出]这是最终答案[输出结束]'),
+      isFalse,
+    );
   });
 
   test('未知工具被忽略', () {

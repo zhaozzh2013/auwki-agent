@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../i18n/strings.dart';
 import '../../theme.dart';
@@ -126,15 +127,54 @@ class _FileTreePanelState extends State<FileTreePanel> {
       final f = File(path);
       if (!await f.exists()) return;
       final stat = await f.stat();
-      if (stat.size > 1024 * 1024) {
+      final ext = path.split('.').last.toLowerCase();
+      final isImage = const {
+        'png',
+        'jpg',
+        'jpeg',
+        'gif',
+        'webp',
+        'bmp',
+      }.contains(ext);
+      final maxBytes = isImage ? 4 * 1024 * 1024 : 1024 * 1024;
+      if (stat.size > maxBytes) {
         _snack(I18n.t('filetree.too_large'));
         return;
       }
+      if (isImage) {
+        final bytes = await f.readAsBytes();
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text(
+              path.split(Platform.pathSeparator).last,
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
+              child: Image.memory(bytes, fit: BoxFit.contain),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  I18n.t('git.close'),
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
       var text = await f.readAsString();
-      if (text.length > 50000) {
-        text = '${text.substring(0, 50000)}\n…[截断]';
+      if (text.length > 500000) {
+        text = '${text.substring(0, 500000)}\n…[截断]';
       }
       if (!mounted) return;
+      final isMarkdown = const {'md', 'markdown', 'mdown'}.contains(ext);
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -146,15 +186,61 @@ class _FileTreePanelState extends State<FileTreePanel> {
           content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
-              child: SelectableText(
-                text,
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                  height: 1.4,
-                ),
-              ),
+              child: isMarkdown
+                  ? MarkdownBody(
+                      data: text,
+                      selectable: true,
+                      styleSheet: MarkdownStyleSheet(
+                        p: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 13,
+                          height: 1.45,
+                        ),
+                        h1: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        h2: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        h3: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        code: TextStyle(
+                          color: AppColors.textPrimary,
+                          backgroundColor: AppColors.surfaceAlt,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                        codeblockDecoration: BoxDecoration(
+                          color: AppColors.surfaceAlt,
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        horizontalRuleDecoration: BoxDecoration(
+                          border: Border(
+                            top: BorderSide(
+                              color: AppColors.border,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : SelectableText(
+                      text,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        height: 1.4,
+                      ),
+                    ),
             ),
           ),
           actions: [
