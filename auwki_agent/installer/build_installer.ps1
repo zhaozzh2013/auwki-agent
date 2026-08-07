@@ -32,6 +32,15 @@ if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" 
 Write-Host "`n[1/4] flutter build windows --release ..."
 Push-Location $flutterProject
 try {
+  # webview_windows 插件需要 nuget.exe（固定 5.10.0 + SHA256）。
+  # 网络不稳时从本地缓存预置，避免下载损坏导致 integrity check 失败。
+  $nugetCache = "C:\auwki_build\nuget-5.10.0.exe"
+  if (Test-Path $nugetCache) {
+    $nugetDest = Join-Path $flutterProject "build\windows\x64\nuget.exe"
+    New-Item -ItemType Directory -Path (Split-Path $nugetDest) -Force | Out-Null
+    Copy-Item $nugetCache $nugetDest -Force
+    Write-Host "Pre-seeded nuget.exe from local cache."
+  }
   flutter build windows --release
   if ($LASTEXITCODE -ne 0) { throw "flutter build failed with exit code $LASTEXITCODE" }
 } finally {

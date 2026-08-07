@@ -729,8 +729,8 @@ ${agent.instruction}
     late final Process process;
     try {
       process = await Process.start(
-        'bash',
-        ['-c', cmd],
+        _shellExecutable(),
+        _shellArgs(cmd),
         workingDirectory: cwd,
       );
     } catch (e) {
@@ -768,6 +768,19 @@ ${agent.instruction}
     return out.length > 6000
         ? '${out.substring(0, 6000)}\n${I18n.t('agent.truncated')}'
         : out;
+  }
+
+  /// 跨平台命令解释器：Windows 用 PowerShell，macOS/Linux 用 /bin/sh。
+  static String _shellExecutable() {
+    if (Platform.isWindows) return 'powershell.exe';
+    return '/bin/sh';
+  }
+
+  static List<String> _shellArgs(String cmd) {
+    if (Platform.isWindows) {
+      return ['-NoProfile', '-NonInteractive', '-Command', cmd];
+    }
+    return ['-c', cmd];
   }
 
   static Future<String> _listfiles(String path, String? cwd) async {
@@ -868,13 +881,34 @@ ${agent.instruction}
 
   /// 把模型给出的路径解析到工作目录下；空路径表示工作目录本身。
   static String _resolvePath(String path, String? cwd) {
-    final p = path.trim().replaceAll('\\', '/');
+    var p = path.trim().replaceAll('\\', '/');
+    final home = _homeDirectory();
+    if (p == '~') {
+      p = home ?? (cwd ?? Directory.current.path).replaceAll('\\', '/');
+    } else if (p.startsWith('~/') && home != null) {
+      p = '$home/${p.substring(2)}';
+    }
     if (p.isEmpty) return (cwd ?? Directory.current.path).replaceAll('\\', '/');
     final isAbsolute =
         p.startsWith('/') || RegExp(r'^[A-Za-z]:/').hasMatch(p);
     if (isAbsolute) return p;
     final base = (cwd ?? Directory.current.path).replaceAll('\\', '/');
     return '$base/$p';
+  }
+
+  /// 跨平台用户主目录：优先 $HOME，Windows 回退到 USERPROFILE。
+  static String? _homeDirectory() {
+    final home = Platform.environment['HOME'];
+    if (home != null && home.trim().isNotEmpty) {
+      return home.trim().replaceAll('\\', '/');
+    }
+    if (Platform.isWindows) {
+      final profile = Platform.environment['USERPROFILE'];
+      if (profile != null && profile.trim().isNotEmpty) {
+        return profile.trim().replaceAll('\\', '/');
+      }
+    }
+    return null;
   }
 
   static String? _validateCommand(String cmd) {
@@ -922,8 +956,8 @@ ${agent.instruction}
     if (!absolute) return false;
     final allowedPrefixes = [
       (cwd ?? Directory.current.path).replaceAll('\\', '/'),
-      '/tmp/',
-      '${Platform.environment['HOME'] ?? ''}/'.replaceAll('\\', '/'),
+      Directory.systemTemp.path.replaceAll('\\', '/'),
+      '${_homeDirectory() ?? ''}/'.replaceAll('\\', '/'),
     ].where((p) => p.isNotEmpty).toList();
     final target = Platform.isWindows ? normalized.toLowerCase() : normalized;
     final prefixes = Platform.isWindows

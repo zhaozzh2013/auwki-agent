@@ -9,14 +9,26 @@ import 'package:flutter/foundation.dart';
 class WorkspaceManager {
   WorkspaceManager._();
 
-  /// “软件所在目录”：发布版取 exe 所在目录，开发版取当前工作目录。
+  /// 各平台默认的工作空间根目录：
+  /// - Windows：发布版取 exe 所在目录（保持绿色版便携特性）
+  /// - macOS：`~/Documents/AUWKI`（避免写入只读的 .app 包内）
+  /// - Linux：`~/.auwki`
+  /// - 开发模式：当前工作目录
   static String get appBaseDirectory {
     if (kReleaseMode) {
       try {
-        return File(Platform.resolvedExecutable).parent.absolute.path;
+        final exeDir = File(Platform.resolvedExecutable).parent.absolute.path;
+        if (Platform.isWindows) return exeDir;
       } catch (_) {
-        return Directory.current.absolute.path;
+        // 落到下面的平台默认值
       }
+    }
+    final home = Platform.environment['HOME'];
+    if (Platform.isMacOS && home != null && home.trim().isNotEmpty) {
+      return '$home/Documents/AUWKI';
+    }
+    if (Platform.isLinux && home != null && home.trim().isNotEmpty) {
+      return '$home/.auwki';
     }
     return Directory.current.absolute.path;
   }

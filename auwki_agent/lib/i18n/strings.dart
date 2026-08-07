@@ -307,7 +307,8 @@ class I18n {
       'agent.error.command_blocked': '[已拦截] 高风险命令已拒绝执行: {command}',
       'agent.error.command_cancelled': '[已拦截] 用户取消了命令执行: {command}',
       'agent.error.command_timeout': '[错误] 命令执行超时（30 秒），已强制终止: {command}',
-      'agent.error.command_start_failed': '[错误] 无法启动命令解释器 (bash)，请确认环境已安装 bash。',
+      'agent.error.command_start_failed':
+          '[错误] 无法启动命令解释器（Windows 使用 PowerShell，macOS/Linux 使用 sh），请确认系统环境正常。',
       'agent.error.path_blocked': '[已拦截] 拒绝写入敏感路径: {path}',
       'agent.error.empty_path': '[已拦截] 写入路径为空。',
       'agent.error.file_exists': '[已拦截] 文件已存在，拒绝覆盖: {path}',
@@ -666,7 +667,7 @@ class I18n {
       'agent.error.command_timeout':
           '[Error] Command timed out after 30 seconds and was killed: {command}',
       'agent.error.command_start_failed':
-          '[Error] Failed to start bash. Please make sure bash is installed.',
+          '[Error] Failed to start the shell (PowerShell on Windows, sh on macOS/Linux). Please check your environment.',
       'agent.error.path_blocked':
           '[Blocked] Refusing to write sensitive path: {path}',
       'agent.error.empty_path': '[Blocked] Empty write path.',
