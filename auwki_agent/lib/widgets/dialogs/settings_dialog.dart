@@ -314,6 +314,38 @@ class _SettingsFormState extends State<_SettingsForm> {
               ),
             ),
             const SizedBox(height: 16),
+            _label(I18n.t('settings.debug_mode')),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      I18n.t('settings.debug_mode.desc'),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: s.debugMode,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (v) => s.setDebugMode(v),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             _label(I18n.t('settings.data_safety')),
             Container(
               padding: const EdgeInsets.all(12),

@@ -243,6 +243,11 @@ class I18n {
       'settings.show_round_changes': '每轮结束总结本轮更改',
       'settings.show_round_changes.desc':
           '开启后，每轮回答结束会在末尾单独显示“本轮更改”气泡，并在右侧面板记录文件变更。',
+      'settings.debug_mode': '调试模式',
+      'settings.debug_mode.desc':
+          '不折叠工具信息，并把每轮解析结果输出为调试气泡（方便排查问题）。',
+      'tool.debug': '调试',
+      'debug.round': '回合 #{n}',
       'settings.data_safety': '数据安全',
       'settings.data_safety.desc':
           '应用会自动备份聊天记录与设置（保留最近 20 份），也可以手动备份或导出。',
@@ -658,6 +663,11 @@ class I18n {
       'settings.show_round_changes': 'Summarize changes after each round',
       'settings.show_round_changes.desc':
           'When enabled, a "Round changes" bubble is shown after the reply and file changes are recorded in the right panel.',
+      'settings.debug_mode': 'Debug mode',
+      'settings.debug_mode.desc':
+          'Do not collapse tool info and output per-round parse results as debug bubbles (helps diagnosing issues).',
+      'tool.debug': 'Debug',
+      'debug.round': 'Round #{n}',
       'settings.data_safety': 'Data safety',
       'settings.data_safety.desc':
           'Chats and settings are backed up automatically (last 20 kept). You can also back up or export manually.',

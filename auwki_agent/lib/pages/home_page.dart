@@ -1963,6 +1963,8 @@ class _ToolBubbleState extends State<_ToolBubble> {
     final running = m.toolRunning;
     final ok = m.toolOk;
     final hasResult = m.toolResult != null;
+    final debug = AppState.settingsOf(context).debugMode;
+    final expanded = _expanded || debug;
     String status;
     Color statusColor;
     if (running) {
@@ -2084,19 +2086,22 @@ class _ToolBubbleState extends State<_ToolBubble> {
                     if (_visibleToolContent(m).isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        _truncate(_visibleToolContent(m), 140),
+                        _truncate(
+                          _visibleToolContent(m),
+                          debug ? 2000 : 140,
+                        ),
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                           fontFamily: 'monospace',
                         ),
-                        maxLines: _expanded ? null : 1,
-                        overflow: _expanded
+                        maxLines: expanded ? null : 1,
+                        overflow: expanded
                             ? TextOverflow.visible
                             : TextOverflow.ellipsis,
                       ),
                     ],
-                    if (_expanded && hasResult) ...[
+                    if (expanded && hasResult) ...[
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,

@@ -684,6 +684,26 @@ class _ChatInputState extends State<ChatInput> {
         final calls = isFinal
             ? const <AgentToolCall>[]
             : AgentRunner.parse(rawText);
+        if (settings.debugMode) {
+          final summary = StringBuffer()
+            ..writeln(I18n.t('debug.round', {'n': '$turn'}))
+            ..writeln('raw长度: ${rawText.length}')
+            ..writeln('isFinal: $isFinal')
+            ..writeln('解析工具数: ${calls.length}')
+            ..writeln('hasToolBlock: ${AgentRunner.hasToolBlock(rawText)}');
+          store.addMessage(
+            convId,
+            Message(
+              id: 'm_${DateTime.now().microsecondsSinceEpoch}_dbg',
+              sender: Sender.tool,
+              text: summary.toString().trim(),
+              toolName: 'debug',
+              toolArgs: summary.toString().trim(),
+              toolResult: rawText,
+              toolOk: true,
+            ),
+          );
+        }
         final thinking = widget.thinking;
         if (calls.isEmpty &&
             !isFinal &&
@@ -810,6 +830,21 @@ class _ChatInputState extends State<ChatInput> {
             ),
           );
         }
+      }
+
+      if (settings.debugMode && !cancel.isCompleted) {
+        store.addMessage(
+          convId,
+          Message(
+            id: 'm_${DateTime.now().microsecondsSinceEpoch}_dbg_end',
+            sender: Sender.tool,
+            text: '${I18n.t('tool.debug')}: answered=$answered',
+            toolName: 'debug',
+            toolArgs: 'answered=$answered',
+            toolResult: 'answered=$answered',
+            toolOk: true,
+          ),
+        );
       }
 
       // 兜底：工具轮次全部用完后仍没有最终回答，强制收尾一轮。
