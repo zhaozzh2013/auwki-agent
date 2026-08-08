@@ -36,7 +36,6 @@ This table does not cover every provider. For the full provider list, see the [p
 
 Your API key is stored locally in `settings.json` and is never uploaded to any server.
 
-**We are also considering custom provider support in a future update. Thanks for your understanding!*
 
 ### Dual modes / 5 thinking levels
 
