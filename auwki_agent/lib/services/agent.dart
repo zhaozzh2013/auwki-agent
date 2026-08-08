@@ -952,6 +952,19 @@ ${agent.instruction}
     return ['-c', cmd];
   }
 
+  /// 跨平台命令解释器：Windows 用 PowerShell，macOS/Linux 用 /bin/sh。
+  static String _shellExecutable() {
+    if (Platform.isWindows) return 'powershell.exe';
+    return '/bin/sh';
+  }
+
+  static List<String> _shellArgs(String cmd) {
+    if (Platform.isWindows) {
+      return ['-NoProfile', '-NonInteractive', '-Command', cmd];
+    }
+    return ['-c', cmd];
+  }
+
   static Future<String> _listfiles(String path, String? cwd) async {
     final dir = Directory(_resolvePath(path, cwd));
     if (!await dir.exists()) {
