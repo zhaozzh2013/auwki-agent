@@ -1,4 +1,5 @@
 # AUWKI Agent
+version V2.0.0
 
 中文 [English](/docs/README_EN.md)
 
