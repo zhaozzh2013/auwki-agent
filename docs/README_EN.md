@@ -74,8 +74,8 @@ Tool calls are shown in the UI as **independent bubbles** (icon + type + status 
 | **Web** | ✅ Full support |
 | **Android** | 🟡 Planned support |
 | **Windows** | ✅ Full support |
-| **macOS** | ❌ Not supported |
-| **iOS** | ❌ Not supported |
+| **macOS** | Not supported |
+| **iOS** | Not supported |
 
 
 ---
