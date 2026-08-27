@@ -65,8 +65,13 @@ void main() {
     // 无布局/渲染异常（Stack bounded、RenderBox not laid out 等）
     expect(tester.takeException(), isNull,
         reason: '打开演示对话不应产生布局异常');
-    // 消息确实渲染出来了（代码块复制按钮可见）
+    // 消息确实渲染出来了（代码块复制按钮可见 + 代码内容真实渲染）
     expect(find.byIcon(Icons.copy), findsWidgets,
         reason: '代码块复制按钮应正常渲染');
+    expect(
+      find.textContaining('def quicksort'),
+      findsWidgets,
+      reason: '代码块内容必须多行显示（回归：曾因 builder 返回 null 内容丢失）',
+    );
   });
 }

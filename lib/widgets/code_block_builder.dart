@@ -24,19 +24,36 @@ class CopyCodeBlockBuilder extends MarkdownElementBuilder {
       lines.removeLast();
     }
     final code = lines.join('\n').trimRight();
-    final child = super.visitElementAfterWithContext(
-      context,
-      element,
-      preferredStyle,
-      parentStyle,
-    );
 
-    // 注意：不能用 Stack + Positioned —— markdown 块级元素在垂直方向
+    // 注意 1：不能用 Stack + Positioned —— markdown 块级元素在垂直方向
     // 是无界约束，Positioned 子项会导致 Stack 尺寸计算失败（TransformLayer
     // invalid matrix / 文字堆叠）。Align 是普通子项，布局安全。
+    // 注意 2：不要依赖 super.visitElementAfter* —— 其默认实现返回 null，
+    // 而本 builder 只要返回非 null 的 widget，flutter_markdown 就会用它
+    // 完全替代默认渲染（代码块内容必须由我们自行渲染）。
     return Stack(
       children: [
-        ?child,
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceAlt.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SelectableText(
+              code,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12.5,
+                height: 1.55,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
         Align(
           alignment: Alignment.topRight,
           child: Padding(
