@@ -1181,85 +1181,85 @@ class _ConvRowState extends State<_ConvRow> {
         child: MouseRegion(
           onEnter: (_) => _setHovered(true),
           onExit: (_) => _setHovered(false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onTap,
-            onSecondaryTapDown: (details) {
-              widget.onClaimRightClick();
-              widget.onMenu(details.globalPosition);
-            },
-            child: Container(
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: 9),
-              decoration: BoxDecoration(
-                gradient: isActive
-                    ? LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          accent.withValues(alpha: 0.26),
-                          accent.withValues(alpha: 0.07),
-                        ],
-                      )
-                    : null,
-                color: isActive
-                    ? null
-                    : (hovered ? AppColors.hover : Colors.transparent),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  if (conv.unread)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: accent,
-                        shape: BoxShape.circle,
+          // 背景悬停高亮交给 InkWell 原生管理：无 setState、无延迟、
+          // 鼠标移入移出即时响应（旧版 postFrame 方案有 1 帧延迟与抖动）。
+          // _hovered 仅用于悬停时显示“更多”按钮。
+          child: Material(
+            color: isActive
+                ? accent.withValues(alpha: 0.14)
+                : Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              hoverColor: isActive
+                  ? AppColors.hover.withValues(alpha: 0.55)
+                  : AppColors.hover,
+              splashColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              onTap: widget.onTap,
+              onSecondaryTapDown: (details) {
+                widget.onClaimRightClick();
+                widget.onMenu(details.globalPosition);
+              },
+              child: Container(
+                height: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 9),
+                child: Row(
+                  children: [
+                    if (conv.unread)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      conv.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 12.5,
-                        fontWeight: conv.unread
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                  if (conv.pinned)
-                    Icon(Icons.push_pin, size: 14, color: accent)
-                  else if (hovered)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        final box =
-                            context.findRenderObject() as RenderBox?;
-                        if (box != null) {
-                          final pos =
-                              box.localToGlobal(Offset.zero) +
-                              const Offset(208, 26);
-                          widget.onMenu(pos);
-                        }
-                      },
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.more_horiz,
-                          size: 14,
-                          color: AppColors.textSecondary,
+                    Expanded(
+                      child: Text(
+                        conv.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: conv.unread
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                     ),
-                ],
+                    if (conv.pinned)
+                      Icon(Icons.push_pin, size: 14, color: accent)
+                    else if (hovered)
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          final box =
+                              context.findRenderObject() as RenderBox?;
+                          if (box != null) {
+                            final pos =
+                                box.localToGlobal(Offset.zero) +
+                                const Offset(208, 26);
+                            widget.onMenu(pos);
+                          }
+                        },
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.more_horiz,
+                            size: 14,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
