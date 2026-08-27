@@ -53,6 +53,8 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+  // 平铺合成器（如 niri）下最大化以对齐 surface 尺寸，避免 resize 抖动
+  gtk_window_maximize(window);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
