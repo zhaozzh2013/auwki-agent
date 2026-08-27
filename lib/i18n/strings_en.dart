@@ -174,6 +174,18 @@ const Map<String, String> kStringsEn = {
       'memory.empty': 'No memories yet',
       'memory.remembered': 'Remembered: {text}',
       'memory.remember_empty': 'Usage: /remember <content>',
+      'memory.saved': 'Saved ✓',
+      'memory.kind.preference': 'preference',
+      'memory.kind.project': 'project',
+      'memory.kind.code': 'code',
+      'memory.kind.fact': 'fact',
+      'research.stage.plan': 'Planning research questions',
+      'research.stage.search1': 'Round-1 parallel search',
+      'research.stage.search2': 'Follow-up search',
+      'research.done': 'Research report ready ✓',
+      'research.no_topic': 'Usage: /research <topic> (e.g. /research AI agent trends 2026)',
+
+
       'memory.forgotten': 'Forgotten memory {id}',
       'memory.forget_empty': 'Usage: /forget <memory id> (see /memory)',
       'task.center': 'Task Center',

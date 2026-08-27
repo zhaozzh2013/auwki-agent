@@ -14,6 +14,7 @@ import '../models/models.dart';
 import '../services/agent.dart';
 import '../services/agent_runtime.dart';
 import '../services/ai_providers.dart';
+import '../services/deep_research.dart';
 import '../services/git_service.dart';
 import '../services/memory_service.dart';
 import '../services/prompts.dart';
@@ -329,11 +330,17 @@ class _ChatInputState extends State<ChatInput> {
     }
 
     final effectiveText = _expandSlashPrompt(text);
-    // A17：轻量自动提取用户偏好。
+    // A17：轻量自动提取用户偏好；D：偏好之外提取项目事实。
     if (settings.memoryEnabled) {
       final pref = MemoryService.instance.maybeExtractPreference(effectiveText);
       if (pref != null) {
         unawaited(MemoryService.instance.add(pref, kind: 'preference'));
+      } else {
+        final proj = MemoryService.instance
+            .maybeExtractProjectFact(effectiveText);
+        if (proj != null) {
+          unawaited(MemoryService.instance.add(proj, kind: 'project'));
+        }
       }
     }
 
@@ -1015,8 +1022,12 @@ class _ChatInputState extends State<ChatInput> {
         final allowDesktop = desktopActions.isEmpty
             ? null
             : await _confirmDesktopActions(desktopActions);
+        // H：并行工具调用——先创建全部工具气泡，再 Future.wait 同时执行，
+        // 最后按调用顺序串行收尾（结果回灌顺序与调用顺序一致）。
+        final toolMsgIds = <String>[];
         for (final call in unique) {
           final toolMsgId = 'm_${DateTime.now().microsecondsSinceEpoch}_t';
+          toolMsgIds.add(toolMsgId);
           store.addMessage(
             convId,
             Message(
@@ -1028,54 +1039,26 @@ class _ChatInputState extends State<ChatInput> {
               toolRunning: true,
             ),
           );
-          final AgentResult r;
-          if (call.tool == 'command' && allowCommands == false) {
-            r = AgentResult(
-              call: call,
-              output: '',
-              error: I18n.t(
-                'agent.error.command_cancelled',
-                {'command': call.args},
-              ),
-            );
-          } else if (call.tool == 'command' && allowCommands == true) {
-            r = await toolRuntime.execute(
-              call,
-              cwd: workspace,
-              conversationId: convId,
-              commandConfirmed: true,
-              extraAllowedDirs: extraDirs,
-              onFileConfirm: (c, preview) => _confirmFileChange(c, preview),
-            );
-          } else if (AgentRunner.isDesktopTool(call.tool)) {
-            if (allowDesktop == false) {
-              r = AgentResult(
-                call: call,
-                output: '',
-                error: I18n.t(
-                  'agent.error.desktop_cancelled',
-                  {'action': call.args},
-                ),
-              );
-            } else {
-              r = await toolRuntime.execute(
-                call,
-                cwd: workspace,
-                conversationId: convId,
-                commandConfirmed: true,
-                extraAllowedDirs: extraDirs,
-                onFileConfirm: (c, preview) => _confirmFileChange(c, preview),
-              );
-            }
-          } else {
-            r = await _executeCall(
-              call,
-              cwd: workspace,
-              runtime: toolRuntime,
-              conversationId: convId,
-              extraAllowedDirs: extraDirs,
-            );
-          }
+        }
+        Future<AgentResult> runOne(AgentToolCall call) async {
+          final r = await _executeCall(
+            call,
+            cwd: workspace,
+            runtime: toolRuntime,
+            conversationId: convId,
+            extraAllowedDirs: extraDirs,
+            commandAllowed: allowCommands,
+            desktopAllowed: allowDesktop,
+            onFileConfirm: (c, preview) => _confirmFileChange(c, preview),
+          );
+          return r;
+        }
+        final parallelResults = await Future.wait([
+          for (final call in unique) runOne(call),
+        ]);
+        for (var i = 0; i < unique.length; i++) {
+          final call = unique[i];
+          final r = parallelResults[i];
           results.add(r);
           // 视觉模型：截图成功后读取图片，下一轮请求自动附加。
           if (r.ok &&
@@ -1106,7 +1089,7 @@ class _ChatInputState extends State<ChatInput> {
                   .add(call.tool == 'writefile' ? 'created' : 'modified');
             }
           }
-          store.finishToolMessage(convId, toolMsgId, r.error ?? r.output, r.ok);
+          store.finishToolMessage(convId, toolMsgIds[i], r.error ?? r.output, r.ok);
         }
 
         currentHistory.add({'role': 'assistant', 'content': rawAcc.toString()});
@@ -1718,7 +1701,55 @@ class _ChatInputState extends State<ChatInput> {
     ToolRuntime? runtime,
     String? conversationId,
     List<String>? extraAllowedDirs,
+    bool? commandAllowed,
+    bool? desktopAllowed,
+    Future<bool> Function(AgentToolCall, String)? onFileConfirm,
   }) async {
+    final confirm = onFileConfirm ?? _confirmFileChange;
+    // H：已有批量确认结果时不再逐条弹窗。
+    if (call.tool == 'command') {
+      if (commandAllowed == false) {
+        return AgentResult(
+          call: call,
+          output: '',
+          error: I18n.t(
+            'agent.error.command_cancelled',
+            {'command': call.args},
+          ),
+        );
+      }
+      if (commandAllowed == true) {
+        return (runtime ?? ToolRuntime(settings: AppState.settingsOf(context)))
+            .execute(
+              call,
+              cwd: cwd,
+              conversationId: conversationId,
+              commandConfirmed: true,
+              extraAllowedDirs: extraAllowedDirs,
+              onFileConfirm: confirm,
+            );
+      }
+    } else if (AgentRunner.isDesktopTool(call.tool)) {
+      if (desktopAllowed == false) {
+        return AgentResult(
+          call: call,
+          output: '',
+          error: I18n.t(
+            'agent.error.desktop_cancelled',
+            {'action': call.args},
+          ),
+        );
+      }
+      return (runtime ?? ToolRuntime(settings: AppState.settingsOf(context)))
+          .execute(
+            call,
+            cwd: cwd,
+            conversationId: conversationId,
+            commandConfirmed: true,
+            extraAllowedDirs: extraAllowedDirs,
+            onFileConfirm: confirm,
+          );
+    }
     if (call.tool != 'command') {
       return (runtime ?? ToolRuntime(settings: AppState.settingsOf(context)))
           .execute(
@@ -1726,7 +1757,7 @@ class _ChatInputState extends State<ChatInput> {
             cwd: cwd,
             conversationId: conversationId,
             extraAllowedDirs: extraAllowedDirs,
-            onFileConfirm: (c, preview) => _confirmFileChange(c, preview),
+            onFileConfirm: confirm,
           );
     }
     if (!mounted) {
@@ -2053,7 +2084,12 @@ class _ChatInputState extends State<ChatInput> {
       case '/commands':
         _sendTo(store, convId, text: text, assistantText: _commandHelpText());
         return true;
+      case '/research':
+        _runResearchCommand(store, convId, normalized, text);
+        return true;
       case '/remember':
+      case '/note-project':
+      case '/note-code':
       case '/forget':
       case '/memory':
         _runMemoryCommand(store, convId, normalized, text);
@@ -2091,6 +2127,110 @@ class _ChatInputState extends State<ChatInput> {
     }());
   }
 
+  /// A：Deep Research 模式——拆解→并行搜索→补搜→综合报告。
+  void _runResearchCommand(
+    ChatStore store,
+    String convId,
+    String normalized,
+    String raw,
+  ) {
+    final topic = normalized == '/research'
+        ? ''
+        : raw.substring('/research'.length).trim();
+    if (topic.isEmpty) {
+      _sendTo(store, convId, text: raw,
+          assistantText: I18n.t('research.no_topic'));
+      return;
+    }
+    final settings = AppState.settingsOf(context);
+    if (settings.apiKey.trim().isEmpty &&
+        settings.providerRoutes.every(
+          (r) => (r['apiKey'] ?? '').toString().trim().isEmpty,
+        )) {
+      _sendTo(store, convId, text: raw,
+          assistantText: I18n.t('chat.no_key'));
+      return;
+    }
+    unawaited(() async {
+      final progressId = 'm_${DateTime.now().microsecondsSinceEpoch}_r';
+      store.addMessage(
+        convId,
+        Message(
+          id: progressId,
+          sender: Sender.tool,
+          text: '',
+          toolName: 'research',
+          toolArgs: topic,
+          toolRunning: true,
+        ),
+      );
+      // 与主对话一致的供应商/模型路由。
+      final route = settings.resolveRoute(widget.thinking);
+      final client = route != null
+          ? AiClient(
+              config: route.provider.withBaseUrl(route.provider.baseUrl),
+              apiKeys: [route.apiKey],
+            )
+          : settings.client;
+      final effectiveModel =
+          route?.model ?? _effectiveModel(null, settings);
+
+      Stream<String> chat(
+        String system,
+        List<Map<String, dynamic>> history,
+      ) =>
+          client.chatStream(
+            ChatRequest(
+              system: system,
+              messages: history,
+              model: effectiveModel,
+              maxTokens: 2400,
+              temperature: 0.4,
+            ),
+          );
+      Future<String> search(String query) async {
+        final r = await AgentRunner.execute(
+          AgentToolCall(tool: 'websearch', args: query),
+          cwd: null,
+        );
+        return r.error ?? r.output;
+      }
+
+      try {
+        final result = await DeepResearchService.instance.research(
+          topic: topic,
+          chat: chat,
+          search: search,
+          onProgress: (stage) {
+            store.updateMessage(
+              convId,
+              progressId,
+              '${DeepResearchService.stageLabel(stage)}…',
+            );
+          },
+        );
+        store.finishToolMessage(
+          convId,
+          progressId,
+          I18n.t('research.done'),
+          true,
+        );
+        var report = result.report;
+        // 模型未附参考来源时补全。
+        if (result.sources.isNotEmpty &&
+            !report.contains('## 参考来源') &&
+            !report.contains('## References')) {
+          report = '$report\n\n## 参考来源\n'
+              '${result.sources.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')}';
+        }
+        _sendTo(store, convId, text: raw, assistantText: report);
+      } catch (e) {
+        store.finishToolMessage(convId, progressId, '$e', false);
+        _sendTo(store, convId, text: raw, assistantText: '❌ $e');
+      }
+    }());
+  }
+
   void _runMemoryCommand(
     ChatStore store,
     String convId,
@@ -2103,7 +2243,7 @@ class _ChatInputState extends State<ChatInput> {
         final body = entries.isEmpty
             ? I18n.t('memory.empty')
             : entries.reversed
-                  .map((e) => '${e.id}: ${e.text}')
+                  .map((e) => '${e.id}: [${I18n.t('memory.kind.${e.kind}')}] ${e.text}')
                   .join('\n');
         _sendTo(
           store,
@@ -2111,6 +2251,38 @@ class _ChatInputState extends State<ChatInput> {
           text: raw,
           assistantText: '## ${I18n.t('memory.title')}\n$body',
         );
+      }());
+      return;
+    }
+    if (normalized == '/note-project' || normalized.startsWith('/note-project ')) {
+      final content = raw.length > '/note-project'.length
+          ? raw.substring('/note-project'.length).trim()
+          : '';
+      unawaited(() async {
+        if (content.isEmpty) {
+          _sendTo(store, convId, text: raw,
+              assistantText: I18n.t('memory.remember_empty'));
+          return;
+        }
+        await MemoryService.instance.add(content, kind: 'project');
+        _sendTo(store, convId, text: raw,
+            assistantText: I18n.t('memory.saved'));
+      }());
+      return;
+    }
+    if (normalized == '/note-code' || normalized.startsWith('/note-code ')) {
+      final content = raw.length > '/note-code'.length
+          ? raw.substring('/note-code'.length).trim()
+          : '';
+      unawaited(() async {
+        if (content.isEmpty) {
+          _sendTo(store, convId, text: raw,
+              assistantText: I18n.t('memory.remember_empty'));
+          return;
+        }
+        await MemoryService.instance.add(content, kind: 'code');
+        _sendTo(store, convId, text: raw,
+            assistantText: I18n.t('memory.saved'));
       }());
       return;
     }

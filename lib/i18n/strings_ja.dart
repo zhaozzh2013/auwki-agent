@@ -160,6 +160,18 @@ const Map<String, String> kStringsJa = {
       'memory.empty': 'メモリはまだありません',
       'memory.remembered': '記憶しました: {text}',
       'memory.remember_empty': '使用方法: /remember <content>',
+      'memory.saved': '保存しました ✓',
+      'memory.kind.preference': '好み',
+      'memory.kind.project': 'プロジェクト',
+      'memory.kind.code': 'コード',
+      'memory.kind.fact': '事実',
+      'research.stage.plan': '調査の問いを分解中',
+      'research.stage.search1': '第1ラウンド並列検索',
+      'research.stage.search2': '追加検索',
+      'research.done': '調査レポート完成 ✓',
+      'research.no_topic': '使用方法: /research <テーマ>（例: /research 2026年のAIエージェント動向）',
+
+
       'memory.forgotten': 'メモリ {id} を忘れました',
       'memory.forget_empty': '使い方: /forget <メモリ ID>（/memory を参照）',
       'task.empty': 'まだタスクはありません',

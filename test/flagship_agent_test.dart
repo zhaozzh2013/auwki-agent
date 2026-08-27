@@ -85,4 +85,44 @@ void main() {
     expect(outcome.toolTrace, contains('拦截'));
     expect(outcome.output, isNotEmpty);
   });
+  test('H：子代理一次响应多个工具并行执行且结果齐全', () async {
+    final tmp = Directory.systemTemp.createTempSync('subagent_parallel');
+    addTearDown(() {
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+    File('${tmp.path}/a.txt').writeAsStringSync('AAA');
+    File('${tmp.path}/b.txt').writeAsStringSync('BBB');
+
+    var calls = 0;
+    Stream<String> chat(
+      String system,
+      List<Map<String, dynamic>> messages,
+    ) {
+      calls++;
+      if (calls == 1) {
+        return _s('[正式输出]\n'
+            'readfile("a.txt")\n'
+            'readfile("b.txt")\n'
+            '[输出结束]');
+      }
+      return _s('两个文件都读完了，内容分别是 AAA 和 BBB。');
+    }
+
+    final outcome = await AgentRunner.runFlagshipAgent(
+      chat: chat,
+      systemPrompt: 'test-system',
+      messages: [
+        <String, dynamic>{'role': 'user', 'content': 'read both files'},
+      ],
+      cwd: tmp.path,
+    );
+
+    expect(outcome.ok, isTrue);
+    // 两个工具的结果都被记录且带文件名
+    expect(outcome.toolTrace, contains('readfile("a.txt")'));
+    expect(outcome.toolTrace, contains('readfile("b.txt")'));
+    expect(outcome.toolTrace, contains('AAA'));
+    expect(outcome.toolTrace, contains('BBB'));
+    expect(calls, 2);
+  });
 }

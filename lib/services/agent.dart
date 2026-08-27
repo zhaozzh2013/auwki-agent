@@ -462,32 +462,47 @@ Think step by step (chain of thought). Use tools when needed. End with a concise
       }
 
       final results = <String>[];
-      for (final call in calls) {
-        if (call.tool == 'command') {
-          final allow = onCommandRequest == null
-              ? false
-              : await onCommandRequest(call.args);
-          if (!allow) {
-            final blocked = I18n.t(
-              'agent.error.subagent_command_blocked',
-              {'command': call.args},
-            );
-            trace.add(blocked);
-            results.add(_ellipsize(blocked, 3000));
-            continue;
-          }
-          final r = await execute(call, cwd: cwd);
-          final detail = r.error ?? r.output;
-          trace.add('${r.call.display}\n$detail');
-          results.add(
-            '${r.call.display}\n${_ellipsize(detail, 3000)}',
+      // H：非 command 工具并行执行；command 保持逐条确认（交互式）。
+      final commands = calls.where((c) => c.tool == 'command').toList();
+      final others = calls.where((c) => c.tool != 'command').toList();
+      final byArgs = <AgentToolCall, ({String? r, String? err, bool ok})>{};
+
+      for (final call in commands) {
+        final allow = onCommandRequest == null
+            ? false
+            : await onCommandRequest(call.args);
+        if (!allow) {
+          final blocked = I18n.t(
+            'agent.error.subagent_command_blocked',
+            {'command': call.args},
           );
+          byArgs[call] = (r: null, err: blocked, ok: false);
           continue;
         }
         final r = await execute(call, cwd: cwd);
-        final detail = r.error ?? r.output;
-        trace.add('${r.call.display}\n$detail');
-        results.add('${r.call.display}\n${_ellipsize(detail, 3000)}');
+        byArgs[call] = (r: r.error ?? r.output, err: null, ok: r.ok);
+      }
+
+      final parallelResults = await Future.wait([
+        for (final call in others)
+          () async {
+            final r = await execute(call, cwd: cwd);
+            return (call: call, r: r);
+          }(),
+      ]);
+      for (final entry in parallelResults) {
+        byArgs[entry.call] = (
+          r: entry.r.error ?? entry.r.output,
+          err: null,
+          ok: entry.r.ok,
+        );
+      }
+
+      for (final call in calls) {
+        final out = byArgs[call];
+        final detail = out?.err ?? out?.r ?? '';
+        trace.add('${call.display}\n$detail');
+        results.add('${call.display}\n${_ellipsize(detail, 3000)}');
       }
 
       msgs.add({'role': 'assistant', 'content': raw});

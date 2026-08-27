@@ -33,6 +33,12 @@ class MemoryEntry {
 }
 
 /// 记忆系统（A17）：持久化记忆条目，注入到系统提示词。
+///
+/// kind 约定：
+/// - `fact`      手动 /remember 的通用事实
+/// - `preference`自动提取的用户偏好
+/// - `project`   自动提取的项目事实（技术栈/架构/结构等）
+/// - `code`      /note-code 记录的代码结构笔记
 class MemoryService {
   MemoryService._();
 
@@ -160,6 +166,100 @@ class MemoryService {
         if (sentence.toLowerCase().contains(marker.toLowerCase())) {
           return sentence;
         }
+      }
+    }
+    return null;
+  }
+
+  /// 轻量自动提取项目事实（D：项目长期记忆）。
+  ///
+  /// 保守启发式：仅当句子包含项目类强信号词（>=1 个强词或 >=2 个
+  /// 普通词）时提取，且明显属于用户偏好的句子（由
+  /// [maybeExtractPreference] 判定）不重复提取。
+  String? maybeExtractProjectFact(String text) {
+    if (text.trim().isEmpty) return null;
+    final strong = const [
+      '项目',
+      '架构',
+      '技术栈',
+      '代码库',
+      '仓库',
+      '依赖',
+      '数据库',
+      '框架',
+      '后端',
+      '前端',
+      '部署',
+      'project',
+      'repo',
+      'repository',
+      'architecture',
+      'tech stack',
+      'codebase',
+      'dependency',
+      'framework',
+      'database',
+      'backend',
+      'frontend',
+      'deploy',
+      'built with',
+      'running on',
+      'stack:',
+    ];
+    final weak = const [
+      '使用',
+      '版本',
+      '环境',
+      '目录',
+      '模块',
+      '接口',
+      '构建',
+      '迁移',
+      '配置',
+      'use',
+      'uses',
+      'version',
+      'env',
+      'module',
+      'migrate',
+      'config',
+      'api',
+      'sdk',
+      'flutter',
+      'dart',
+      'python',
+      'node',
+      'rust',
+      'go',
+      'typescript',
+      'sqlite',
+      'postgres',
+      'mysql',
+      'redis',
+      'docker',
+      'linux',
+      'windows',
+      'macos',
+    ];
+    final sentences = text
+        .split(RegExp(r'[\n。！？!?；;]'))
+        .map((s) => s.trim())
+        .where((s) => s.length >= 20 && s.length <= 160)
+        .toList();
+    for (final sentence in sentences) {
+      final lower = sentence.toLowerCase();
+      // 偏好句不重复提取
+      if (maybeExtractPreference(sentence) != null) continue;
+      var strongHits = 0;
+      var weakHits = 0;
+      for (final m in strong) {
+        if (lower.contains(m)) strongHits++;
+      }
+      for (final m in weak) {
+        if (lower.contains(m)) weakHits++;
+      }
+      if (strongHits >= 1 || weakHits >= 2) {
+        return sentence;
       }
     }
     return null;

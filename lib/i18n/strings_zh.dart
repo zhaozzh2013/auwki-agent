@@ -156,6 +156,18 @@ const Map<String, String> kStringsZh = {
       'memory.empty': '暂无记忆',
       'memory.remembered': '已记住：{text}',
       'memory.remember_empty': '用法：/remember 想记住的内容',
+      'memory.saved': '已记住 ✓',
+      'memory.kind.preference': '偏好',
+      'memory.kind.project': '项目',
+      'memory.kind.code': '代码',
+      'memory.kind.fact': '事实',
+      'research.stage.plan': '拆解研究问题',
+      'research.stage.search1': '第一轮并行搜索',
+      'research.stage.search2': '补搜迭代',
+      'research.done': '研究报告已生成 ✓',
+      'research.no_topic': '用法：/research 研究主题（如：/research 2026 年 AI Agent 趋势）',
+
+
       'memory.forgotten': '已删除记忆 {id}',
       'memory.forget_empty': '用法：/forget 记忆ID（用 /memory 查看）',
       'task.center': '任务中心',
