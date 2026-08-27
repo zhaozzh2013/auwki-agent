@@ -26,3 +26,13 @@
 libayatana-appindicator、libayatana-indicator、libdbusmenu-glib、
 libdbusmenu-gtk3、ayatana-ido；keybinder3 为自编译（同目录）。
 .pc 文件中的 `/usr` 前缀需 sed 替换为 prefix 路径。
+## 键盘断言崩溃规避（2026-08-27）
+
+Flutter 引擎已知 bug（上游 issue #150326 等）：GTK 收到"孤儿 key release"
+（无对应按下记录，常发生于按着键切换窗口/输入法组合键）时，
+FlKeyEmbedderResponder 断言 `lookup_hash_table(pressing_records) != 0` 崩溃
+（日志出现 `CRITICAL: update_pressing_state ... assertion failed`）。
+
+规避：`linux/runner/my_application.cc` 挂载 key-press/release 事件过滤器，
+维护已按下键集合；孤儿 release 直接拦截（return TRUE）不传给引擎。
+正常按键行为不变。

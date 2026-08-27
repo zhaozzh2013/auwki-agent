@@ -1,6 +1,39 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+
+// ─────────────────────────────────────────────────────────────────────
+// 键盘事件过滤器：丢弃“孤儿 key release”（没有对应按下记录的松开）。
+// 规避 Flutter 引擎已知 bug：FlKeyEmbedderResponder 收到孤儿 release 时
+// 触发断言 'lookup_hash_table(pressing_records) != 0' 崩溃
+// （上游 issue #150326 等；常发生于按着键切换窗口/输入法组合键）。
+// 在应用窗口层拦截即可，不影响正常按键。
+// ─────────────────────────────────────────────────────────────────────
+static GHashTable* auwki_pressed_keys = NULL;
+
+static gboolean auwki_key_press(GtkWidget* widget, GdkEventKey* event,
+                                gpointer user_data) {
+  if (auwki_pressed_keys == NULL) {
+    auwki_pressed_keys =
+        g_hash_table_new(g_direct_hash, g_direct_equal);
+  }
+  g_hash_table_add(auwki_pressed_keys,
+                   GUINT_TO_POINTER((guint)event->hardware_keycode));
+  return FALSE;  // 继续传递给 Flutter
+}
+
+static gboolean auwki_key_release(GtkWidget* widget, GdkEventKey* event,
+                                  gpointer user_data) {
+  if (auwki_pressed_keys != NULL &&
+      g_hash_table_contains(auwki_pressed_keys,
+                            GUINT_TO_POINTER((guint)event->hardware_keycode))) {
+    g_hash_table_remove(auwki_pressed_keys,
+                        GUINT_TO_POINTER((guint)event->hardware_keycode));
+    return FALSE;  // 正常松开，继续传递
+  }
+  // 孤儿 release：拦截，避免引擎断言崩溃。
+  return TRUE;
+}
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
@@ -68,6 +101,11 @@ static void my_application_activate(GApplication* application) {
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+
+  // 键盘事件过滤器（详见文件头注释）。
+  g_signal_connect(window, "key-press-event", G_CALLBACK(auwki_key_press), NULL);
+  g_signal_connect(window, "key-release-event",
+                   G_CALLBACK(auwki_key_release), NULL);
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
