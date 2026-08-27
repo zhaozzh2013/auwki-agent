@@ -375,7 +375,7 @@ class _SidebarState extends State<Sidebar> {
               padding: const EdgeInsets.only(top: 40),
               child: Center(
                 child: Text(
-                  '还没有对话，点击上方「+ 新建对话」开始',
+                  I18n.t('sidebar.empty'),
                   style: TextStyle(
                     color: AppColors.textTertiary,
                     fontSize: 12,

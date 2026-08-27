@@ -880,10 +880,10 @@ class _RouteCardState extends State<_RouteCard> {
   }
 
   String _roleLabel(ProviderRole role) => switch (role) {
-        ProviderRole.orchestrator => '分配问题',
-        ProviderRole.complex => '解决复杂问题',
-        ProviderRole.simple => '解决简单问题',
-        ProviderRole.daily => '日常使用',
+        ProviderRole.orchestrator => I18n.t('role.orchestrator'),
+        ProviderRole.complex => I18n.t('role.complex'),
+        ProviderRole.simple => I18n.t('role.simple'),
+        ProviderRole.daily => I18n.t('role.daily'),
       };
 
   @override

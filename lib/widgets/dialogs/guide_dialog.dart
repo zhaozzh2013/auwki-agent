@@ -22,10 +22,10 @@ class _GuideDialogState extends State<_GuideDialog> {
   int _page = 0;
 
   static const _steps = [
-    (Icons.auto_awesome, '1. 选择模型', '打开 设置 → 供应商/模型，填入 API Key。'),
-    (Icons.tune, '2. 调整模式', '用顶部 WORK/PLAN 与思考档位控制执行方式。'),
-    (Icons.extension_outlined, '3. Agent 能力', '设置 → Agent 能力：工具开关、自定义工具、权限、MCP、记忆。'),
-    (Icons.dashboard_customize_outlined, '4. 右侧面板', 'Ctrl+K 打开命令面板；右侧面板看文件/Git/浏览器。'),
+    (Icons.auto_awesome, 'guide.step1.title', 'guide.step1.body'),
+    (Icons.tune, 'guide.step2.title', 'guide.step2.body'),
+    (Icons.extension_outlined, 'guide.step3.title', 'guide.step3.body'),
+    (Icons.dashboard_customize_outlined, 'guide.step4.title', 'guide.step4.body'),
   ];
 
   @override
@@ -45,7 +45,7 @@ class _GuideDialogState extends State<_GuideDialog> {
             Icon(icon, size: 40, color: AppColors.primary),
             const SizedBox(height: 12),
             Text(
-              title,
+              I18n.t(title),
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 16,
@@ -54,7 +54,7 @@ class _GuideDialogState extends State<_GuideDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              body,
+              I18n.t(body),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: AppColors.textSecondary,

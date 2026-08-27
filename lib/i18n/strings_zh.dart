@@ -21,6 +21,27 @@ const Map<String, String> kStringsZh = {
       'git.auto_commit': '完成后自动提交',
       'palette.collapse_tools': '折叠/展开工具气泡',
       'guide.title': '使用引导',
+      'settings.retention_forever': '永久',
+      'role.orchestrator': '分配问题',
+      'role.complex': '解决复杂问题',
+      'role.simple': '解决简单问题',
+      'role.daily': '日常使用',
+
+      'settings.retention_30d': '30 天',
+      'settings.retention_90d': '90 天',
+      'settings.retention_180d': '180 天',
+      'settings.retention_365d': '365 天',
+      'sidebar.empty': '还没有对话，点击上方「+ 新建对话」开始',
+
+      'guide.step1.title': '1. 选择模型',
+      'guide.step1.body': '打开 设置 → 供应商/模型，填入 API Key。',
+      'guide.step2.title': '2. 调整模式',
+      'guide.step2.body': '用顶部 WORK/PLAN 与思考档位控制执行方式。',
+      'guide.step3.title': '3. Agent 能力',
+      'guide.step3.body': '设置 → Agent 能力：工具开关、自定义工具、权限、MCP、记忆。',
+      'guide.step4.title': '4. 右侧面板',
+      'guide.step4.body': 'Ctrl+K 打开命令面板；右侧面板看文件/Git/浏览器。',
+
       'tray.show': '显示主窗口',
       'tray.quit': '退出',
       'home.template.empty': '空对话',
@@ -329,6 +350,7 @@ const Map<String, String> kStringsZh = {
       'settings.language': '语言',
       'settings.language.zh': '中文',
       'settings.theme': '主题',
+
       'settings.theme.dark': '深色',
       'settings.theme.light': '浅色',
       'settings.theme.system': '跟随系统',
@@ -387,6 +409,7 @@ const Map<String, String> kStringsZh = {
       'inspector.blocked': '拦截',
       'inspector.empty': '暂无工具调用',
       'sidebar.folder.new': '新建文件夹',
+
       'sidebar.folder.name': '文件夹名',
       'sidebar.folder.rename': '重命名文件夹',
       'sidebar.folder.delete': '删除文件夹',

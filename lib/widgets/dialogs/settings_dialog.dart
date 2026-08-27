@@ -667,15 +667,27 @@ class _SettingsFormState extends State<_SettingsForm> {
                           color: AppColors.textPrimary,
                           fontSize: 12,
                         ),
-                        items: const [
+                        items: [
                           DropdownMenuItem(
                             value: 0,
-                            child: Text('永久'),
+                            child: Text(I18n.t('settings.retention_forever')),
                           ),
-                          DropdownMenuItem(value: 30, child: Text('30 天')),
-                          DropdownMenuItem(value: 90, child: Text('90 天')),
-                          DropdownMenuItem(value: 180, child: Text('180 天')),
-                          DropdownMenuItem(value: 365, child: Text('365 天')),
+                          DropdownMenuItem(
+                            value: 30,
+                            child: Text(I18n.t('settings.retention_30d')),
+                          ),
+                          DropdownMenuItem(
+                            value: 90,
+                            child: Text(I18n.t('settings.retention_90d')),
+                          ),
+                          DropdownMenuItem(
+                            value: 180,
+                            child: Text(I18n.t('settings.retention_180d')),
+                          ),
+                          DropdownMenuItem(
+                            value: 365,
+                            child: Text(I18n.t('settings.retention_365d')),
+                          ),
                         ],
                         onChanged: (v) {
                           if (v != null) s.setRetentionDays(v);
