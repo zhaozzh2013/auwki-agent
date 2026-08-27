@@ -43,7 +43,7 @@ jobs:
             installer\AUWKI-Agent.iss `
             /DStageDir="$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release" `
             /DAppVersion=10.0.0
-          Copy-Item dist\installer\*.exe .
+          Copy-Item "\dist\installer\*.exe" .
         # ISCC 输出目录由 .iss 的 OutputDir 决定（..\..\dist\installer），拷贝到工作区根
 
       - name: 上传产物
