@@ -1,0 +1,1 @@
+enum WorkMode { work, plan }
