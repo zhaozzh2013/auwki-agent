@@ -37,8 +37,8 @@ jobs:
           Set-Content $f $c
           Select-String 'WIL_VERSION' $f
 
-      - name: 构建 Windows Release
-        run: flutter build windows --release
+      - name: 构建 Windows Release（verbose 诊断）
+        run: flutter build windows --release -v
 
       - name: 打包免安装版 zip
         shell: pwsh
