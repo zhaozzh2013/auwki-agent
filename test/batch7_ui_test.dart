@@ -12,6 +12,7 @@ import 'package:auwki_agent/models/models.dart';
 import 'package:auwki_agent/pages/home_page.dart';
 import 'package:auwki_agent/services/chat_database.dart';
 import 'package:auwki_agent/services/settings_store.dart';
+import 'package:auwki_agent/theme.dart';
 import 'package:auwki_agent/services/ui_state.dart';
 import 'package:auwki_agent/widgets/dialogs/guide_dialog.dart';
 import 'package:auwki_agent/widgets/onboarding_screen.dart';
@@ -78,7 +79,7 @@ void main() {
       (tester) async {
     debugPrint('C01: setup');
     await seedSettings({
-      'themeAccent': 2,
+      'cornerRadius': 1.5,
       'uiDensity': 'compact',
       'uiFont': 'serif',
       'highContrast': true,
@@ -89,11 +90,14 @@ void main() {
     debugPrint('C01: reading theme');
     final ctx = tester.element(find.byType(HomePage));
     final theme = Theme.of(ctx);
-    expect(theme.colorScheme.primary, const Color(0xFF22C55E));
+    expect(theme.colorScheme.primary, AppColors.primary);
     expect(theme.visualDensity, VisualDensity.compact);
+    // 圆角系数 1.5 → 对话框圆角 18
+    final dialogShape = theme.dialogTheme.shape as RoundedRectangleBorder;
+    expect(dialogShape.borderRadius, BorderRadius.circular(18));
 
     final settings = AppState.settingsOf(ctx);
-    expect(settings.themeAccent, 2);
+    expect(settings.cornerRadius, 1.5);
     expect(settings.uiDensity, UiDensity.compact);
     expect(settings.uiFont, UiFont.serif);
     expect(settings.highContrast, isTrue);
@@ -123,30 +127,6 @@ void main() {
     await tester.pump();
     final field = tester.widget<TextField>(find.byType(TextField).last);
     expect(field.controller!.text, contains('****'));
-  });
-
-  testWidgets('C10: 模板卡片一键创建带草稿的对话', (tester) async {
-    await seedSettings({});
-    await pumpApp(tester);
-
-    await tester.ensureVisible(find.text(I18n.t('home.template.review')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(I18n.t('home.template.review')));
-    // 让发送链路中的真实文件 IO 完成（与 pumpApp 相同策略）。
-    for (var i = 0; i < 12; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    final store = AppState.chatOf(tester.element(find.byType(HomePage)));
-    expect(store.active, isNotNull);
-    expect(
-      store.active!.messages.where(
-        (m) => m.sender == Sender.user && m.text.contains('评审'),
-      ),
-      isNotEmpty,
-    );
   });
 
   testWidgets('C07: 引导对话框分步可跳过', (tester) async {

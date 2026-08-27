@@ -73,7 +73,6 @@ class SettingsStore extends ChangeNotifier {
   final List<Map<String, dynamic>> _mcpServers = [];
   bool _autoStage = false;
   bool _autoCommit = false;
-  int _themeAccent = 0;
   double _cornerRadius = 1.0;
   UiDensity _uiDensity = UiDensity.standard;
   UiFont _uiFont = UiFont.system;
@@ -173,9 +172,6 @@ class SettingsStore extends ChangeNotifier {
   /// D06：AI 轮次完成后自动暂存/提交。
   bool get autoStage => _autoStage;
   bool get autoCommit => _autoCommit;
-
-  /// C01：主题强调色索引（0=默认）。
-  int get themeAccent => _themeAccent;
 
   /// C01：圆角系数（0.5~1.5）。
   double get cornerRadius => _cornerRadius;
@@ -341,13 +337,6 @@ class SettingsStore extends ChangeNotifier {
   Future<void> setAutoCommit(bool v) async {
     if (_autoCommit == v) return;
     _autoCommit = v;
-    notifyListeners();
-    await _persist();
-  }
-
-  Future<void> setThemeAccent(int index) async {
-    if (_themeAccent == index) return;
-    _themeAccent = index;
     notifyListeners();
     await _persist();
   }
@@ -620,7 +609,6 @@ class SettingsStore extends ChangeNotifier {
     }
     _autoStage = _bool(m, 'autoStage', false);
     _autoCommit = _bool(m, 'autoCommit', false);
-    _themeAccent = _int(m, 'themeAccent', 0);
     _cornerRadius = _double(m, 'cornerRadius', 1.0);
     _uiDensity = _enum(m, 'uiDensity', UiDensity.values, UiDensity.standard);
     _uiFont = _enum(m, 'uiFont', UiFont.values, UiFont.system);
@@ -748,7 +736,6 @@ class SettingsStore extends ChangeNotifier {
         'memoryEnabled': _memoryEnabled,
         'autoStage': _autoStage,
         'autoCommit': _autoCommit,
-        'themeAccent': _themeAccent,
         'cornerRadius': _cornerRadius,
         'uiDensity': _uiDensity.name,
         'uiFont': _uiFont.name,
@@ -1015,7 +1002,6 @@ class SettingsStore extends ChangeNotifier {
         'memoryEnabled': _memoryEnabled,
         'autoStage': _autoStage,
         'autoCommit': _autoCommit,
-        'themeAccent': _themeAccent,
         'cornerRadius': _cornerRadius,
         'uiDensity': _uiDensity.name,
         'uiFont': _uiFont.name,

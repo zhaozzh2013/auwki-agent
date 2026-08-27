@@ -702,7 +702,6 @@ const Map<String, String> kStringsJa = {
       'home.template.translation.prompt': '以下の内容を翻訳してください：',
       'home.template.writing': '文章作成',
       'home.template.writing.prompt': '文章を書いてください（テーマがあれば先に教えてください）。',
-      'settings.accent': 'アクセントカラー',
       'settings.corner_radius': '角丸',
       'settings.density': '表示密度',
       'settings.density.comfortable': 'ゆったり',

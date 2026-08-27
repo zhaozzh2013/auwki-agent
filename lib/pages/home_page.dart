@@ -122,17 +122,6 @@ class _HomePageState extends State<HomePage> {
     _regenerateDraft.value = text;
   }
 
-  void _startTask(String prompt) {
-    // 只注入草稿，由空首页的 ChatInput 统一创建对话并发送，
-    // 避免在这里先建对话、_send 再建一个导致残留空白对话。
-    final store = AppState.chatOf(context);
-    final id = store.newConversation(workspaceDir: _workspaceDir);
-    store.activate(id);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _regenerateDraft.value = prompt;
-    });
-  }
-
   Future<void> _pickWorkspace() async {
     final dir = await FilePicker.getDirectoryPath();
     if (dir != null && dir.trim().isNotEmpty) {
@@ -521,20 +510,12 @@ class _HomePageState extends State<HomePage> {
               mode: _mode,
               thinking: _thinking,
               workspaceDir: _workspaceDir,
-              recentWorkspaces: settings.recentWorkspaces,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
                   regenerateDraft: _regenerateDraft,
                   replyDraft: _replyDraft,
-                  onStartTask: _startTask,
                   onPickWorkspace: _pickWorkspace,
-                  onUseWorkspace: (d) {
-                    setState(() => _workspaceDir = d);
-                    settings.addRecentWorkspace(d);
-                  },
                   onResetWorkspace: () => setState(() => _workspaceDir = null),
-                  onDemo: () => _createDemoConversation(context),
                   greeting: greeting,
                 );
           }
@@ -552,20 +533,12 @@ class _HomePageState extends State<HomePage> {
               mode: _mode,
               thinking: _thinking,
               workspaceDir: _workspaceDir,
-              recentWorkspaces: settings.recentWorkspaces,
               onModeChanged: (m) => setState(() => _mode = m),
               onThinkingChanged: (t) => setState(() => _thinking = t),
-                  onWorkspaceChanged: (v) => setState(() => _workspaceDir = v),
                   regenerateDraft: _regenerateDraft,
                   replyDraft: _replyDraft,
-                  onStartTask: _startTask,
                   onPickWorkspace: _pickWorkspace,
-                  onUseWorkspace: (d) {
-                    setState(() => _workspaceDir = d);
-                    settings.addRecentWorkspace(d);
-                  },
                   onResetWorkspace: () => setState(() => _workspaceDir = null),
-                  onDemo: () => _createDemoConversation(context),
                   greeting: greeting,
                 );
           }
@@ -1286,6 +1259,9 @@ class _ToolTraceLine extends StatelessWidget {
   }
 }
 
+/// 空对话页工作区选择行。
+
+
 class _EmptyHome extends StatelessWidget {
   const _EmptyHome({
     required this.accent,
@@ -1293,17 +1269,12 @@ class _EmptyHome extends StatelessWidget {
     required this.mode,
     required this.thinking,
     required this.workspaceDir,
-    required this.recentWorkspaces,
     required this.regenerateDraft,
     required this.replyDraft,
-    required this.onStartTask,
     required this.onPickWorkspace,
-    required this.onUseWorkspace,
     required this.onResetWorkspace,
-    required this.onDemo,
     required this.onModeChanged,
     required this.onThinkingChanged,
-    required this.onWorkspaceChanged,
     required this.greeting,
   });
 
@@ -1312,17 +1283,12 @@ class _EmptyHome extends StatelessWidget {
   final WorkMode mode;
   final ThinkingLevel thinking;
   final String? workspaceDir;
-  final List<String> recentWorkspaces;
   final ValueNotifier<String?> regenerateDraft;
   final ValueNotifier<ReplyTarget?> replyDraft;
-  final ValueChanged<String> onStartTask;
   final VoidCallback onPickWorkspace;
-  final ValueChanged<String> onUseWorkspace;
   final VoidCallback onResetWorkspace;
-  final VoidCallback onDemo;
   final ValueChanged<WorkMode> onModeChanged;
   final ValueChanged<ThinkingLevel> onThinkingChanged;
-  final ValueChanged<String?> onWorkspaceChanged;
   final String greeting;
 
   @override
@@ -1367,44 +1333,6 @@ class _EmptyHome extends StatelessWidget {
                       replyDraft: replyDraft,
                       onModeChanged: onModeChanged,
                       onThinkingChanged: onThinkingChanged,
-                    ),
-                    const SizedBox(height: 12),
-                    _Entrance(
-                      child: _QuickStartRow(
-                        workspaceDir: workspaceDir,
-                        accent: accent,
-                        onPickWorkspace: onPickWorkspace,
-                        onStart: onStartTask,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // C10：模板卡片 + 最近项目。
-                    _Entrance(
-                      child: _TemplateCards(
-                        accent: accent,
-                        onStart: onStartTask,
-                      ),
-                    ),
-                    if (recentWorkspaces.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      _Entrance(
-                        child: _RecentProjects(
-                          dirs: recentWorkspaces,
-                          accent: accent,
-                          onUse: onUseWorkspace,
-                          onReset: onResetWorkspace,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: onDemo,
-                      icon: const Icon(Icons.live_help_outlined, size: 15),
-                      label: Text(I18n.t('palette.demo')),
-                      style: TextButton.styleFrom(
-                        foregroundColor: accent,
-                        textStyle: const TextStyle(fontSize: 12),
-                      ),
                     ),
                   ],
                 ),
@@ -1840,127 +1768,6 @@ class _ChatViewState extends State<ChatView> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _QuickStartRow extends StatelessWidget {
-  const _QuickStartRow({
-    required this.workspaceDir,
-    required this.accent,
-    required this.onPickWorkspace,
-    required this.onStart,
-  });
-
-  final String? workspaceDir;
-  final Color accent;
-  final VoidCallback onPickWorkspace;
-  final ValueChanged<String> onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    final tasks = [
-      I18n.t('home.task.progress'),
-      I18n.t('home.task.snake'),
-      I18n.t('home.task.review'),
-      I18n.t('home.task.report'),
-    ];
-    return Container(
-      width: 680,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: InkWell(
-              onTap: onPickWorkspace,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.folder_outlined,
-                      size: 15,
-                      color: accent,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        workspaceDir?.trim().isNotEmpty == true
-                            ? workspaceDir!
-                            : I18n.t('home.workspace.pick'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: workspaceDir?.trim().isNotEmpty == true
-                              ? AppColors.textPrimary
-                              : AppColors.textTertiary,
-                          fontSize: 11.5,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 4,
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.end,
-              children: [
-                for (final t in tasks)
-                  ActionChip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(
-                      t,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 11,
-                      ),
-                    ),
-                    backgroundColor: AppColors.surfaceAlt,
-                    side: BorderSide(color: AppColors.border),
-                    onPressed: () => onStart(t),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Entrance extends StatelessWidget {
-  const _Entrance({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: kAnimSlow,
-      curve: Curves.easeOutCubic,
-      builder: (context, t, child) => Opacity(
-        opacity: t,
-        child: Transform.translate(
-          offset: Offset(0, 12 * (1 - t)),
-          child: child,
-        ),
-      ),
-      child: child,
     );
   }
 }
@@ -3243,139 +3050,6 @@ class _ScreenshotPreview extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
       child: Image.file(f, height: 180, fit: BoxFit.contain),
-    );
-  }
-}
-
-/// C10：新建对话模板卡片。
-class _TemplateCards extends StatelessWidget {
-  const _TemplateCards({required this.accent, required this.onStart});
-
-  final Color accent;
-  final ValueChanged<String> onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (
-        Icons.forum_outlined,
-        I18n.t('home.template.empty'),
-        I18n.t('home.template.empty.prompt'),
-      ),
-      (
-        Icons.code,
-        I18n.t('home.template.review'),
-        I18n.t('home.template.review.prompt'),
-      ),
-      (
-        Icons.edit_note,
-        I18n.t('home.template.writing'),
-        I18n.t('home.template.writing.prompt'),
-      ),
-      (
-        Icons.translate,
-        I18n.t('home.template.translation'),
-        I18n.t('home.template.translation.prompt'),
-      ),
-      (
-        Icons.summarize_outlined,
-        I18n.t('home.template.report'),
-        I18n.t('home.template.report.prompt'),
-      ),
-    ];
-    return Container(
-      width: 680,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final (icon, label, prompt) in items)
-            ActionChip(
-              avatar: Icon(icon, size: 14, color: accent),
-              label: Text(
-                label,
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 12,
-                ),
-              ),
-              backgroundColor: AppColors.surfaceAlt,
-              side: BorderSide(color: AppColors.border),
-              onPressed: () => onStart(prompt),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// C10：最近项目快捷入口。
-class _RecentProjects extends StatelessWidget {
-  const _RecentProjects({
-    required this.dirs,
-    required this.accent,
-    required this.onUse,
-    required this.onReset,
-  });
-
-  final List<String> dirs;
-  final Color accent;
-  final ValueChanged<String> onUse;
-  final VoidCallback onReset;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 680,
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.history, size: 15, color: accent),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final d in dirs.take(4))
-                  ActionChip(
-                    label: Text(
-                      d,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                    backgroundColor: AppColors.surfaceAlt,
-                    side: BorderSide(color: AppColors.border),
-                    onPressed: () => onUse(d),
-                  ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: onReset,
-            child: Text(
-              I18n.t('home.workspace.reset'),
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

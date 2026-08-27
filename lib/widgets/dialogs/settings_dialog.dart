@@ -185,38 +185,6 @@ class _SettingsFormState extends State<_SettingsForm> {
               ),
             ),
             const SizedBox(height: 16),
-            _label(I18n.t('settings.accent')),
-            Wrap(
-              spacing: 10,
-              children: [
-                for (var i = 0; i < 6; i++)
-                  GestureDetector(
-                    onTap: () => _applyWithOverlay(() => s.setThemeAccent(i)),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _accentColor(i),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: s.themeAccent == i
-                              ? AppColors.textPrimary
-                              : AppColors.border,
-                          width: s.themeAccent == i ? 2 : 1,
-                        ),
-                      ),
-                      child: s.themeAccent == i
-                          ? const Icon(
-                              Icons.check,
-                              size: 14,
-                              color: Colors.white,
-                            )
-                          : null,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
             _label(I18n.t('settings.corner_radius')),
             Slider(
               value: s.cornerRadius,
@@ -749,18 +717,6 @@ class _SettingsFormState extends State<_SettingsForm> {
       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
     ),
   );
-
-  Color _accentColor(int index) {
-    const colors = [
-      Color(0xFFE5484D),
-      Color(0xFF3B82F6),
-      Color(0xFF22C55E),
-      Color(0xFFA855F7),
-      Color(0xFFF97316),
-      Color(0xFFEC4899),
-    ];
-    return colors[index.clamp(0, colors.length - 1)];
-  }
 
   Future<void> _onThemeSelected(AppTheme theme) async {
     if (theme == widget.settings.theme) return;

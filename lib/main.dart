@@ -227,15 +227,6 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
           final basePalette = isDark ? AppPalette.dark : AppPalette.light;
           // bug2：强调色作用于全局调色板；bug5：高对比强化文字/边框。
           var palette = basePalette;
-          if (_settings.themeAccent != 0) {
-            final accent = _accentColors(_settings.themeAccent, palette.primary);
-            palette = palette.copyWith(
-              primary: accent,
-              primarySoft: accent.withValues(alpha: 0.16),
-              planAccent: accent,
-              planAccentSoft: accent.withValues(alpha: 0.16),
-            );
-          }
           if (_settings.highContrast) {
             palette = palette.copyWith(
               textPrimary: isDark ? Colors.white : Colors.black,
@@ -285,7 +276,7 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
   }
 
   ThemeData _buildTheme(bool isDark, AppPalette palette) {
-    final accent = _accentColors(_settings.themeAccent, palette.primary);
+    final accent = palette.primary;
     final fontFamily = switch (_settings.uiFont) {
       UiFont.system => null,
       UiFont.serif => 'Georgia',
@@ -302,6 +293,10 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       UiDensity.standard => VisualDensity.standard,
       UiDensity.comfortable => VisualDensity.comfortable,
     };
+    // C01：圆角系数作用于主题组件（对话框/卡片/按钮/底部弹层/输入框）。
+    final corner = 12.0 * _settings.cornerRadius.clamp(0.5, 1.5);
+    final cornerShape =
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(corner));
     // bug10：基于完整基础字族构建，避免 TextTheme() 造成输入提示文字异常放大。
     final base = isDark ? ThemeData.dark() : ThemeData.light();
     final textTheme = base.textTheme
@@ -328,6 +323,18 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       brightness: isDark ? Brightness.dark : Brightness.light,
       scaffoldBackgroundColor: palette.bg,
       canvasColor: palette.bg,
+      cardTheme: CardThemeData(shape: cornerShape),
+      dialogTheme: DialogThemeData(shape: cornerShape),
+      bottomSheetTheme: BottomSheetThemeData(shape: cornerShape),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(shape: cornerShape),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(shape: cornerShape),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(shape: cornerShape),
+      ),
       splashColor: Colors.transparent,
       highlightColor: Colors.transparent,
       hoverColor: palette.hover,
@@ -384,17 +391,6 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     );
   }
 
-  Color _accentColors(int index, Color fallback) {
-    const colors = [
-      null, // 默认
-      Color(0xFF3B82F6), // 蓝
-      Color(0xFF22C55E), // 绿
-      Color(0xFFA855F7), // 紫
-      Color(0xFFF97316), // 橙
-      Color(0xFFEC4899), // 粉
-    ];
-    return colors[index.clamp(0, colors.length - 1)] ?? fallback;
-  }
 }
 
 /// 设置加载完成前的启动画面，避免首次引导闪一下。

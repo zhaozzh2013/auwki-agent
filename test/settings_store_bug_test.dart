@@ -113,7 +113,7 @@ void main() {
       'provider': 'openai',
       'model': 'gpt-4o-mini',
       'theme': 'light',
-      'themeAccent': 'not-an-int', // 坏类型
+      'cornerRadius': 'not-a-number', // 坏类型
       'retentionDays': 30,
       'uiFont': 'mono',
     }));
@@ -123,7 +123,7 @@ void main() {
     expect(s.theme, AppTheme.light); // 正常字段生效
     expect(s.retentionDays, 30);
     expect(s.uiFont, UiFont.mono);
-    expect(s.themeAccent, 0); // 坏字段回默认
+    expect(s.cornerRadius, 1.0); // 坏字段回默认
   });
 
   test('恢复备份（导出不含 Key）不丢失现有 API Key', () async {

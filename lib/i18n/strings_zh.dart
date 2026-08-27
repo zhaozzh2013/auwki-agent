@@ -55,7 +55,6 @@ const Map<String, String> kStringsZh = {
       'home.template.report': '周报',
       'home.template.report.prompt': '请根据本周工作生成一份周报。',
       'settings.logs': '日志查看器',
-      'settings.accent': '强调色',
       'settings.corner_radius': '圆角',
       'settings.density': '界面密度',
       'settings.density.compact': '紧凑',

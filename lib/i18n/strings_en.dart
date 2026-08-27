@@ -57,7 +57,6 @@ const Map<String, String> kStringsEn = {
       'home.template.report': 'Weekly report',
       'home.template.report.prompt': 'Generate a weekly report from this week\'s work.',
       'settings.logs': 'Log viewer',
-      'settings.accent': 'Accent color',
       'settings.corner_radius': 'Corner radius',
       'settings.density': 'UI density',
       'settings.density.compact': 'Compact',
