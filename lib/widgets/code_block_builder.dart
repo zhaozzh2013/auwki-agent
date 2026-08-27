@@ -26,60 +26,65 @@ class CopyCodeBlockBuilder extends MarkdownElementBuilder {
     final code = lines.join('\n').trimRight();
     final child = super.visitElementAfter(element, preferredStyle);
 
+    // 注意：不能用 Stack + Positioned —— markdown 块级元素在垂直方向
+    // 是无界约束，Positioned 子项会导致 Stack 尺寸计算失败（TransformLayer
+    // invalid matrix / 文字堆叠）。Align 是普通子项，布局安全。
     return Stack(
       children: [
         if (child != null) child,
-        Positioned(
-          top: 4,
-          right: 4,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(5),
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: code));
-                final messenger = ScaffoldMessenger.maybeOf(context);
-                messenger
-                  ?..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        I18n.t('conv.copy.done'),
-                        style: const TextStyle(fontSize: 11),
+        Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, right: 4),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(5),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: code));
+                  final messenger = ScaffoldMessenger.maybeOf(context);
+                  messenger
+                    ?..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          I18n.t('conv.copy.done'),
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        duration: const Duration(seconds: 1),
+                        backgroundColor: AppColors.surfaceAlt,
                       ),
-                      duration: const Duration(seconds: 1),
-                      backgroundColor: AppColors.surfaceAlt,
-                    ),
-                  );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceAlt.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.copy,
-                      size: 11,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      I18n.t('conv.copy'),
-                      style: TextStyle(
+                    );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceAlt.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.copy,
+                        size: 11,
                         color: AppColors.textSecondary,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 3),
+                      Text(
+                        I18n.t('conv.copy'),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
