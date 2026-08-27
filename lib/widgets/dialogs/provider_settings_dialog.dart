@@ -438,6 +438,18 @@ class _ProviderSettingsDialogState extends State<ProviderSettingsDialog> {
                         fontFamily: 'monospace',
                       ),
                     ),
+                    if (s.temperatureFor(s.model) != null)
+                      InkWell(
+                        onTap: () => s.resetModelTemperature(s.model),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Icon(
+                            Icons.restart_alt,
+                            size: 15,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

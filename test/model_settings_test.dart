@@ -13,14 +13,16 @@ void main() {
     expect(keys, ['sk-a', 'sk-b', 'sk-c', 'sk-d']);
   });
 
-  test('G10: 温度默认 1.0，可单独配置，恢复 1.0 时移除', () async {
+  test('G10: 温度可单独配置；显式 1.0 保存，reset 移除', () async {
     final s = SettingsStore();
     expect(s.temperatureFor('claude-sonnet-4-5'), isNull);
     await s.setTemperature('claude-sonnet-4-5', 0.2);
     expect(s.temperatureFor('claude-sonnet-4-5'), 0.2);
     expect(s.temperatureFor('other-model'), isNull);
     await s.setTemperature('claude-sonnet-4-5', 1.0);
-    expect(s.temperatureFor('claude-sonnet-4-5'), isNull);
+    expect(s.temperatureFor('claude-sonnet-4-5'), 1.0); // 显式保存
+    await s.resetModelTemperature('claude-sonnet-4-5');
+    expect(s.temperatureFor('claude-sonnet-4-5'), isNull); // 移除回退预设
   });
 
   test('G11: 预设温度基调', () {
