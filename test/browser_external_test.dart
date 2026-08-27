@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:auwki_agent/services/browser_service.dart';
@@ -13,6 +15,11 @@ void main() {
   });
 
   test('非 Windows 平台创建外部浏览器会话且导航可用', () async {
+    if (Platform.isWindows) {
+      // Windows 走内嵌 WebView2，外部浏览器模式仅验证非 Windows 平台。
+      markTestSkipped('外部浏览器模式在 Windows 上不适用');
+      return;
+    }
     final s = await BrowserService.instance
         .createSession(url: 'https://example.com');
     expect(s, isNotNull);
@@ -39,6 +46,10 @@ void main() {
   });
 
   test('外部模式刷新=重新在系统浏览器打开（不抛异常）', () async {
+    if (Platform.isWindows) {
+      markTestSkipped('外部浏览器模式在 Windows 上不适用');
+      return;
+    }
     final s = await BrowserService.instance.createSession();
     expect(s!.isExternal, isTrue);
     await BrowserService.instance.refresh(s);
