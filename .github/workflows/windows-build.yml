@@ -1,0 +1,56 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:        # 手动触发（Actions 页面 → Run workflow）
+  push:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: 拉取依赖
+        run: flutter pub get
+
+      - name: 全量测试
+        run: flutter test
+
+      - name: 构建 Windows Release
+        run: flutter build windows --release
+
+      - name: 打包免安装版 zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* `
+            -DestinationPath AUWKI-Agent-windows-x64.zip -Force
+
+      - name: 安装 Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: 构建安装包 Setup.exe
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            installer\AUWKI-Agent.iss `
+            /DStageDir="$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release" `
+            /DAppVersion=10.0.0
+          Copy-Item dist\installer\*.exe .
+        # ISCC 输出目录由 .iss 的 OutputDir 决定（..\..\dist\installer），拷贝到工作区根
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: AUWKI-Agent-windows-x64
+          path: |
+            AUWKI-Agent-windows-x64.zip
+            AUWKI-Agent-Setup-*.exe
+          if-no-files-found: error
