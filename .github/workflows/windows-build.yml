@@ -26,13 +26,15 @@ jobs:
       - name: 修复 webview_windows 的 WIL 版本（新 MSVC/C++20 coroutine 兼容）
         # 根因：WIL 1.0.220914.1 的 wil/coroutine.h 在 MSVC 14.5x + /std:c++20 下
         # include <experimental/coroutine> 触发 STL1011 硬错误；升级 WIL 即修复。
+        # 版本号实时查询 nuget（不写死，避免版本不存在导致 nuget 安装失败）。
         shell: pwsh
         run: |
+          $ver = (Invoke-RestMethod 'https://api.nuget.org/v3-flatcontainer/microsoft.windows.implementationlibrary/index.json').versions[-1]
+          Write-Host "最新 WIL 版本: $ver"
           $f = 'windows/flutter/ephemeral/.plugin_symlinks/webview_windows/windows/CMakeLists.txt'
           $c = Get-Content $f -Raw
-          $c = $c -replace 'set\(WIL_VERSION "1\.0\.220914\.1"\)', 'set(WIL_VERSION "1.0.241129.3")'
+          $c = $c -replace 'set\(WIL_VERSION "1\.0\.220914\.1"\)', ("set(WIL_VERSION `"$ver`")")
           Set-Content $f $c
-          Write-Host "WIL_VERSION 已升级:"
           Select-String 'WIL_VERSION' $f
 
       - name: 构建 Windows Release
