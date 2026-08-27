@@ -618,6 +618,9 @@ const Map<String, String> kStringsJa = {
       'browser.user_agent': 'User-Agent を変更',
       'browser.user_agent.hint': '空欄にするとデフォルトを使用します',
       'browser.zoom': 'ズーム',
+      'browser.external_mode': 'このプラットフォームではシステムのブラウザでページを開きます（組み込みブラウザは Windows のみ）。',
+      'browser.open_system': 'システムブラウザで開く',
+
       'browser.cookies_cleared': 'Cookie を消去しました',
       'browser.cache_cleared': 'キャッシュをクリアしました',
       'browser.runtime_missing': 'WebView2 Runtime が検出されないため、内蔵ブラウザを起動できません。\n\nMicrosoft Edge WebView2 Runtime をインストールしてください（通常は Windows 11 に同梱されています）。',

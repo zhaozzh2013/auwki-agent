@@ -70,11 +70,11 @@ Tool calls are shown in the UI as **independent bubbles** (icon + type + status 
 
 | Platform | Status |
 |---|---|
-| **Linux** | ✅ Full support |
-| **Web** | ✅ Full support |
-| **Android** | 🟡 Planned support |
-| **Windows** | ✅ Full support |
-| **macOS** | ❌ Not supported |
+| **Windows** | ✅ Full support (embedded WebView2 browser, TTS, screenshots) |
+| **Linux** | ✅ Full support (browser panel opens pages in system browser) |
+| **macOS** | 🟡 Code ready, pending verification on a Mac (requires Xcode) |
+| **Android** | 🟡 Planned (workspace not created yet; desktop features need trimming) |
+| **Web** | ❌ Not supported yet (depends on dart:io / sqlite3 ffi, fails to compile) |
 | **iOS** | ❌ Not supported |
 
 

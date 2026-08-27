@@ -670,6 +670,9 @@ const Map<String, String> kStringsZh = {
       'browser.user_agent': '修改 User-Agent',
       'browser.user_agent.hint': '留空使用默认值',
       'browser.zoom': '缩放',
+      'browser.external_mode': '当前平台使用系统默认浏览器打开网页（内嵌浏览器仅 Windows 支持）。',
+      'browser.open_system': '在系统浏览器打开',
+
       'browser.cookies_cleared': 'Cookie 已清除',
       'browser.cache_cleared': '缓存已清除',
       'browser.runtime_missing':

@@ -28,12 +28,19 @@ class BrowserCookie {
   final DateTime? expires;
 }
 
-/// 一个独立的内置浏览器窗口（每个会话一个 WebView2 实例）。
+/// 一个浏览器会话。
+///
+/// - Windows：内嵌 WebView2（[controller] 非空）。
+/// - 其它平台（Linux/macOS 等）：外部浏览器模式（[controller] 为 null，
+///   [isExternal] 为 true），导航改为调用系统默认浏览器打开。
 class BrowserSession extends ChangeNotifier {
-  BrowserSession({required this.id, required this.controller});
+  BrowserSession({required this.id, this.controller});
 
   final String id;
-  final WebviewController controller;
+  final WebviewController? controller;
+
+  /// 是否外部浏览器模式（非 Windows 平台）。
+  bool get isExternal => controller == null;
 
   String url = '';
   String title = '';
@@ -45,35 +52,54 @@ class BrowserSession extends ChangeNotifier {
   final List<StreamSubscription<dynamic>> _subs = [];
   bool _disposed = false;
 
+  /// 在系统默认浏览器中打开当前 url（外部模式）。
+  Future<void> openExternal() async {
+    final target = url.trim();
+    if (target.isEmpty) return;
+    try {
+      if (Platform.isMacOS) {
+        await Process.start('open', [target]);
+      } else if (Platform.isWindows) {
+        await Process.start('cmd', ['/c', 'start', '', target]);
+      } else {
+        await Process.start('xdg-open', [target]);
+      }
+    } catch (_) {}
+    title = target;
+    notifyListeners();
+  }
+
   Future<void> attach() async {
+    final c = controller;
+    if (c == null) return;
     _subs.add(
-      controller.url.listen((u) {
+      c.url.listen((u) {
         url = u;
         loadError = null;
         notifyListeners();
       }),
     );
     _subs.add(
-      controller.title.listen((t) {
+      c.title.listen((t) {
         title = t;
         notifyListeners();
       }),
     );
     _subs.add(
-      controller.loadingState.listen((s) {
+      c.loadingState.listen((s) {
         loading = s == LoadingState.loading;
         notifyListeners();
       }),
     );
     _subs.add(
-      controller.historyChanged.listen((h) {
+      c.historyChanged.listen((h) {
         canGoBack = h.canGoBack;
         canGoForward = h.canGoForward;
         notifyListeners();
       }),
     );
     _subs.add(
-      controller.onLoadError.listen((e) {
+      c.onLoadError.listen((e) {
         loadError = e.name;
         notifyListeners();
       }),
@@ -88,7 +114,7 @@ class BrowserSession extends ChangeNotifier {
     }
     _subs.clear();
     try {
-      await controller.dispose();
+      await controller?.dispose();
     } catch (_) {}
     notifyListeners();
   }
@@ -114,7 +140,9 @@ class BrowserService extends ChangeNotifier {
   String? get environmentError => _envError;
 
   /// 初始化 WebView2 环境（整个应用共享一份用户数据目录）。
+  /// 非 Windows 平台使用外部浏览器模式，无需初始化。
   Future<String?> ensureEnvironment() {
+    if (!Platform.isWindows) return Future.value(null);
     final lock = _envLock ??= _initEnvironment();
     return lock.then((_) => _envError);
   }
@@ -138,10 +166,21 @@ class BrowserService extends ChangeNotifier {
     }
   }
 
-  /// 创建新的浏览器窗口（会话）。初始化失败时返回 null。
+  /// 创建新的浏览器会话。Windows 内嵌 WebView2；其它平台创建
+  /// 外部浏览器模式会话（导航时调用系统默认浏览器）。
   Future<BrowserSession?> createSession({String url = homeUrl}) async {
     final err = await ensureEnvironment();
     if (err != null) return null;
+
+    if (!Platform.isWindows) {
+      final session = BrowserSession(id: 'b${++_counter}', controller: null)
+        ..url = url;
+      _sessions.add(session);
+      notifyListeners();
+      await session.openExternal();
+      return session;
+    }
+
     final controller = WebviewController();
     final session = BrowserSession(
       id: 'b${++_counter}',
@@ -178,35 +217,48 @@ class BrowserService extends ChangeNotifier {
     var u = rawUrl.trim();
     if (u.isEmpty) return;
     if (!u.contains('://')) u = 'https://$u';
+    s.url = u;
     s.loadError = null;
     notifyListeners();
+    if (s.isExternal) {
+      await s.openExternal();
+      return;
+    }
     try {
-      await s.controller.loadUrl(u);
+      await s.controller?.loadUrl(u);
       await _applyPendingCookies(s, u);
     } catch (_) {}
   }
 
   Future<void> refresh(BrowserSession s) async {
+    if (s.isExternal) {
+      // 外部浏览器模式：重新在系统浏览器打开。
+      await s.openExternal();
+      return;
+    }
     try {
-      await s.controller.reload();
+      await s.controller?.reload();
     } catch (_) {}
   }
 
   Future<void> stop(BrowserSession s) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.stop();
+      await s.controller?.stop();
     } catch (_) {}
   }
 
   Future<void> goBack(BrowserSession s) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.goBack();
+      await s.controller?.goBack();
     } catch (_) {}
   }
 
   Future<void> goForward(BrowserSession s) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.goForward();
+      await s.controller?.goForward();
     } catch (_) {}
   }
 
@@ -252,6 +304,7 @@ class BrowserService extends ChangeNotifier {
   }
 
   Future<void> _injectCookie(BrowserSession s, BrowserCookie c) async {
+    if (s.isExternal) return; // 外部浏览器模式下无法注入 Cookie
     try {
       final sb = StringBuffer()
         ..write('${c.name}=${c.value}')
@@ -261,7 +314,7 @@ class BrowserService extends ChangeNotifier {
         sb.write('; expires=${_cookieDate(c.expires!)}');
       }
       final script = 'document.cookie = ${jsonEncode(sb.toString())};';
-      await s.controller.executeScript(script);
+      await s.controller?.executeScript(script);
     } catch (_) {}
   }
 
@@ -374,8 +427,9 @@ class BrowserService extends ChangeNotifier {
   Future<void> clearCookies() async {
     _pendingCookies.clear();
     for (final s in _sessions) {
+      if (s.isExternal) continue; // 外部浏览器 Cookie 由系统浏览器管理
       try {
-        await s.controller.clearCookies();
+        await s.controller?.clearCookies();
       } catch (_) {}
     }
     notifyListeners();
@@ -383,35 +437,40 @@ class BrowserService extends ChangeNotifier {
 
   Future<void> clearCache() async {
     for (final s in _sessions) {
+      if (s.isExternal) continue;
       try {
-        await s.controller.clearCache();
+        await s.controller?.clearCache();
       } catch (_) {}
     }
   }
 
   Future<void> setCacheDisabled(bool disabled) async {
     for (final s in _sessions) {
+      if (s.isExternal) continue;
       try {
-        await s.controller.setCacheDisabled(disabled);
+        await s.controller?.setCacheDisabled(disabled);
       } catch (_) {}
     }
   }
 
   Future<void> openDevTools(BrowserSession s) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.openDevTools();
+      await s.controller?.openDevTools();
     } catch (_) {}
   }
 
   Future<void> setUserAgent(BrowserSession s, String ua) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.setUserAgent(ua);
+      await s.controller?.setUserAgent(ua);
     } catch (_) {}
   }
 
   Future<void> setZoom(BrowserSession s, double factor) async {
+    if (s.isExternal) return;
     try {
-      await s.controller.setZoomFactor(factor);
+      await s.controller?.setZoomFactor(factor);
     } catch (_) {}
   }
 }

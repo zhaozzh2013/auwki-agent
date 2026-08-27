@@ -127,6 +127,37 @@ class _BrowserPanelState extends State<BrowserPanel> {
   }
 
   Future<void> _privacyMenu() async {
+    // 外部浏览器模式：WebView2 专属操作不可用，改为提供“打开系统浏览器”。
+    final active = _active ?? (_service.sessions.isNotEmpty ? _service.sessions.last : null);
+    if (active != null && active.isExternal) {
+      final extAction = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: AppColors.surface,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.open_in_new),
+                title: Text(
+                  I18n.t('browser.open_system'),
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx, 'open_external'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (extAction == 'open_external' && mounted) {
+        await active.openExternal();
+      }
+      return;
+    }
+
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -466,8 +497,13 @@ class _WebViewBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = session.controller;
+    if (controller == null) {
+      // 外部浏览器模式（非 Windows 平台）
+      return _ExternalBrowserView(session: session);
+    }
     return ValueListenableBuilder<WebviewValue>(
-      valueListenable: session.controller,
+      valueListenable: controller,
       builder: (context, value, _) {
         if (!value.isInitialized) {
           return const Center(
@@ -478,8 +514,50 @@ class _WebViewBody extends StatelessWidget {
             ),
           );
         }
-        return Webview(session.controller);
+        return Webview(controller);
       },
+    );
+  }
+}
+
+/// 外部浏览器模式视图：说明 + 在系统浏览器打开。
+class _ExternalBrowserView extends StatelessWidget {
+  const _ExternalBrowserView({required this.session});
+
+  final BrowserSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.open_in_browser,
+                size: 32, color: AppColors.textSecondary),
+            const SizedBox(height: 10),
+            Text(
+              I18n.t('browser.external_mode'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12.5,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.tonalIcon(
+              onPressed: session.openExternal,
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: Text(
+                I18n.t('browser.open_system'),
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

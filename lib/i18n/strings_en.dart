@@ -709,6 +709,9 @@ const Map<String, String> kStringsEn = {
       'browser.user_agent': 'Change User-Agent',
       'browser.user_agent.hint': 'Leave empty to use the default',
       'browser.zoom': 'Zoom',
+      'browser.external_mode': 'This platform opens pages in your system browser (embedded browser is Windows-only).',
+      'browser.open_system': 'Open in system browser',
+
       'browser.cookies_cleared': 'Cookies cleared',
       'browser.cache_cleared': 'Cache cleared',
       'browser.runtime_missing':
