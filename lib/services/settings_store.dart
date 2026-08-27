@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -82,6 +81,7 @@ class SettingsStore extends ChangeNotifier {
   final Map<String, String> _shortcutOverrides = {};
   double _inspectorWidth = 340;
   bool _inspectorOnLeft = false;
+  double _uiZoom = 1.0;
   final List<String> _recentWorkspaces = [];
   Future<void> _saveQueue = Future<void>.value();
 
@@ -189,6 +189,9 @@ class SettingsStore extends ChangeNotifier {
   double get inspectorWidth => _inspectorWidth;
 
   bool get inspectorOnLeft => _inspectorOnLeft;
+
+  /// 全局界面缩放（Ctrl+=/-/0，0.75~2.0）。
+  double get uiZoom => _uiZoom;
 
   List<String> get recentWorkspaces => List.unmodifiable(_recentWorkspaces);
 
@@ -399,6 +402,15 @@ class SettingsStore extends ChangeNotifier {
   Future<void> setInspectorOnLeft(bool v) async {
     if (_inspectorOnLeft == v) return;
     _inspectorOnLeft = v;
+    notifyListeners();
+    await _persist();
+  }
+
+  /// 全局界面缩放（0.75~2.0）。
+  Future<void> setUiZoom(double v) async {
+    final value = v.clamp(0.75, 2.0);
+    if (_uiZoom == value) return;
+    _uiZoom = value;
     notifyListeners();
     await _persist();
   }
@@ -622,6 +634,7 @@ class SettingsStore extends ChangeNotifier {
     }
     _inspectorWidth = _double(m, 'inspectorWidth', 340);
     _inspectorOnLeft = _bool(m, 'inspectorOnLeft', false);
+    _uiZoom = _double(m, 'uiZoom', 1.0).clamp(0.75, 2.0);
     final recent = m['recentWorkspaces'];
     if (recent is List) {
       _recentWorkspaces
@@ -743,6 +756,7 @@ class SettingsStore extends ChangeNotifier {
         'shortcutOverrides': _shortcutOverrides,
         'inspectorWidth': _inspectorWidth,
         'inspectorOnLeft': _inspectorOnLeft,
+        'uiZoom': _uiZoom,
         'recentWorkspaces': _recentWorkspaces,
       };
 
@@ -1009,6 +1023,7 @@ class SettingsStore extends ChangeNotifier {
         'shortcutOverrides': _shortcutOverrides,
         'inspectorWidth': _inspectorWidth,
         'inspectorOnLeft': _inspectorOnLeft,
+        'uiZoom': _uiZoom,
         'recentWorkspaces': _recentWorkspaces,
       };
 }

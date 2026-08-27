@@ -202,4 +202,20 @@ void main() {
     expect(decoded['enterToSend'], false);
     expect(decoded['schemaVersion'], 2);
   });
+
+  test('uiZoom 界面缩放：clamp 持久化', () async {
+    final s = SettingsStore();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(s.uiZoom, 1.0); // 默认不缩放
+    await s.setUiZoom(1.5);
+    expect(s.uiZoom, 1.5);
+    await s.setUiZoom(9.0); // 超出范围被钳制
+    expect(s.uiZoom, 2.0);
+    await s.setUiZoom(0.1);
+    expect(s.uiZoom, 0.75);
+
+    final s2 = SettingsStore();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(s2.uiZoom, 0.75); // 持久化生效
+  });
 }

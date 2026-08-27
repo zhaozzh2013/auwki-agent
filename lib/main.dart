@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -115,6 +116,8 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     ScheduledTaskService.instance.start();
     // F10：设置加载完成后应用对话保留策略。
     _settings.addListener(_maybeApplyRetention);
+    // 缩放持久化：启动时从设置同步一次。
+    _settings.addListener(_syncZoomFromSettings);
     // E04：第二个实例请求激活时给出提示。
     SingleInstance.activationRequested.addListener(_onActivationRequested);
   }
@@ -137,6 +140,15 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       if (removed > 0) {
         LogService.log('retention: removed $removed conversations (${days}d)');
       }
+    }
+  }
+
+  /// 设置里的缩放值同步到界面（启动时和外部修改时）。
+  void _syncZoomFromSettings() {
+    if (!_settings.isReady) return;
+    final saved = _settings.uiZoom;
+    if (_zoom != saved) {
+      setState(() => _zoom = saved);
     }
   }
 
@@ -167,15 +179,18 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     if (m('zoom_in', '=') ||
         key == LogicalKeyboardKey.numpadAdd) {
       setState(() => _zoom = (_zoom + 0.25).clamp(0.75, 2.0));
+      unawaited(_settings.setUiZoom(_zoom));
       return KeyEventResult.handled;
     }
     if (m('zoom_out', '-') ||
         key == LogicalKeyboardKey.numpadSubtract) {
       setState(() => _zoom = (_zoom - 0.25).clamp(0.75, 2.0));
+      unawaited(_settings.setUiZoom(_zoom));
       return KeyEventResult.handled;
     }
     if (m('zoom_reset', '0') || key == LogicalKeyboardKey.numpad0) {
       setState(() => _zoom = 1.0);
+      unawaited(_settings.setUiZoom(1.0));
       return KeyEventResult.handled;
     }
     if (m('new_chat', 'n')) {
@@ -324,7 +339,11 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
             ),
       textTheme: textTheme,
       visualDensity: visualDensity,
-      iconTheme: IconThemeData(color: palette.textPrimary),
+      // 整体缩放：默认图标大小随 Ctrl+=/- 缩放（文字由 TextScaler 统一缩放）。
+      iconTheme: IconThemeData(
+        color: palette.textPrimary,
+        size: 24 * _zoom,
+      ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: palette.surfaceAlt,
