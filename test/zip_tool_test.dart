@@ -5,11 +5,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:auwki_agent/services/agent.dart';
 
 void main() {
-  if (!Platform.isWindows) {
-    return;
-  }
-
   test('A20: zip and unzip roundtrip', () async {
+    // Windows 的 tar 即 bsdtar；Linux/macOS 需要 bsdtar 才能处理 zip，
+    // 缺失时跳过（agent 会回退为仅 tar.gz 支持）。
+    if (!Platform.isWindows) {
+      final p = await Process.run('sh', ['-c', 'command -v bsdtar']);
+      if (p.exitCode != 0) {
+        markTestSkipped('bsdtar 不可用，跳过集成用例');
+        return;
+      }
+    }
     final tmp = Directory.systemTemp.createTempSync('auwki_zip_test');
     addTearDown(() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);

@@ -1150,6 +1150,23 @@ Add-Type -AssemblyName System.Drawing
     }
   }
 
+  static String? _archiveCmdCache;
+
+  /// 归档命令：Windows 用自带 bsdtar（tar 即 bsdtar）；Linux/macOS 优先
+  /// bsdtar（libarchive，支持 zip），否则回退 tar（仅 tar.gz）。
+  static Future<String> _archiveCmd() async {
+    if (_archiveCmdCache != null) return _archiveCmdCache!;
+    if (!Platform.isWindows) {
+      final p = await Process.run('sh', ['-c', 'command -v bsdtar']);
+      if (p.exitCode == 0) {
+        _archiveCmdCache = 'bsdtar';
+        return _archiveCmdCache!;
+      }
+    }
+    _archiveCmdCache = 'tar';
+    return _archiveCmdCache!;
+  }
+
   static Future<String> _zip(
     String arg,
     String? cwd, [
@@ -1180,10 +1197,13 @@ Add-Type -AssemblyName System.Drawing
         // Windows 自带 bsdtar：-a 按扩展名推断 zip 格式，避免 PowerShell 模块加载问题。
         r = await Process.run('tar', ['-a', '-cf', dst, '-C', parent, name]);
       } else {
-        r = await Process.run(
-          'tar',
-          ['-czf', dst, '-C', parent, name],
-        );
+        // Linux/macOS：优先 bsdtar（-a 按扩展名推断，zip/tar.gz 均可）；
+        // 无 bsdtar 时回退 GNU tar 的 tar.gz 行为。
+        final tarCmd = await _archiveCmd();
+        final args = tarCmd == 'bsdtar'
+            ? ['-a', '-cf', dst, '-C', parent, name]
+            : ['-czf', dst, '-C', parent, name];
+        r = await Process.run(tarCmd, args);
       }
       if (r.exitCode != 0) {
         return '${I18n.t('agent.error.zip_failed')}\n${r.stderr}';
@@ -1214,7 +1234,9 @@ Add-Type -AssemblyName System.Drawing
     }
     try {
       // 防 zip-slip：解压前校验所有条目，拒绝 .. / 绝对路径。
-      final list = await Process.run('tar', ['-tf', archive]);
+      // Linux/macOS 优先 bsdtar（GNU tar 无法读取 zip）。
+      final tarCmd = await _archiveCmd();
+      final list = await Process.run(tarCmd, ['-tf', archive]);
       if (list.exitCode != 0) {
         return '${I18n.t('agent.error.unzip_failed')}\n${list.stderr}';
       }
@@ -1227,7 +1249,7 @@ Add-Type -AssemblyName System.Drawing
       }
       await Directory(dest).create(recursive: true);
       final ProcessResult r;
-      r = await Process.run('tar', ['-xf', archive, '-C', dest]);
+      r = await Process.run(tarCmd, ['-xf', archive, '-C', dest]);
       if (r.exitCode != 0) {
         return '${I18n.t('agent.error.unzip_failed')}\n${r.stderr}';
       }
