@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:webview_windows/webview_windows.dart';
 
 import '../../i18n/strings.dart';
 import '../../services/browser_service.dart';
@@ -22,9 +21,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
   final BrowserService _service = BrowserService.instance;
   BrowserSession? _active;
   BrowserSession? _fullscreen;
-  String? _initError;
-  bool _initializing = false;
-
   @override
   void initState() {
     super.initState();
@@ -48,14 +44,7 @@ class _BrowserPanelState extends State<BrowserPanel> {
   }
 
   Future<void> _init() async {
-    setState(() => _initializing = true);
-    final err = await _service.ensureEnvironment();
-    if (!mounted) return;
-    setState(() {
-      _initError = err;
-      _initializing = false;
-    });
-    if (err == null && _service.sessions.isEmpty) {
+    if (_service.sessions.isEmpty) {
       final s = await _service.createSession();
       if (mounted && s != null) setState(() => _active = s);
     }
@@ -127,37 +116,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
   }
 
   Future<void> _privacyMenu() async {
-    // 外部浏览器模式：WebView2 专属操作不可用，改为提供“打开系统浏览器”。
-    final active = _active ?? (_service.sessions.isNotEmpty ? _service.sessions.last : null);
-    if (active != null && active.isExternal) {
-      final extAction = await showModalBottomSheet<String>(
-        context: context,
-        backgroundColor: AppColors.surface,
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.open_in_new),
-                title: Text(
-                  I18n.t('browser.open_system'),
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                  ),
-                ),
-                onTap: () => Navigator.pop(ctx, 'open_external'),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (extAction == 'open_external' && mounted) {
-        await active.openExternal();
-      }
-      return;
-    }
-
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -304,43 +262,6 @@ class _BrowserPanelState extends State<BrowserPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_initializing) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-    if (_initError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.orangeAccent, size: 30),
-              const SizedBox(height: 10),
-              Text(
-                I18n.t('browser.runtime_missing'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12.5,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: _init,
-                icon: Icon(Icons.refresh, size: 16, color: widget.accent),
-                label: Text(
-                  I18n.t('git.refresh'),
-                  style: TextStyle(color: widget.accent, fontSize: 12.5),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     final sessions = _service.sessions;
     if (sessions.isEmpty) {
       return Center(
@@ -497,26 +418,8 @@ class _WebViewBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = session.controller;
-    if (controller == null) {
-      // 外部浏览器模式（非 Windows 平台）
-      return _ExternalBrowserView(session: session);
-    }
-    return ValueListenableBuilder<WebviewValue>(
-      valueListenable: controller,
-      builder: (context, value, _) {
-        if (!value.isInitialized) {
-          return const Center(
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
-        return Webview(controller);
-      },
-    );
+    // 全平台统一外部浏览器模式。
+    return _ExternalBrowserView(session: session);
   }
 }
 
