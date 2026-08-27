@@ -174,6 +174,7 @@ class AppColors {
   static AppPalette _current = AppPalette.dark;
 
   static set palette(AppPalette p) => _current = p;
+  // ignore: unnecessary_getters_setters — 保持字段私有，外部只经此访问
   static AppPalette get palette => _current;
 
   /// 卡片/气泡阴影色：浅色主题用轻阴影，深色主题用深阴影。

@@ -41,16 +41,6 @@ class Sidebar extends StatefulWidget {
 /// 主区时间分组。
 enum _ConvGroup { today, yesterday, week, month, older }
 
-extension on _ConvGroup {
-  String get label => switch (this) {
-        _ConvGroup.today => I18n.t('sidebar.section.today'),
-        _ConvGroup.yesterday => I18n.t('sidebar.section.yesterday'),
-        _ConvGroup.week => I18n.t('sidebar.section.7d'),
-        _ConvGroup.month => I18n.t('sidebar.section.30d'),
-        _ConvGroup.older => I18n.t('sidebar.section.older'),
-      };
-}
-
 /// 主区视觉条目：节头或对话行；对话行携带其在 `topLevel` 中的索引。
 class _VisualItem {
   const _VisualItem.header(this.group)
@@ -91,7 +81,7 @@ class _SidebarState extends State<Sidebar> {
             // 等待子项的 PointerDown / SecondaryTapDown 先声明右键归属，
             // 避免空白区域菜单和条目菜单同时弹出。
             Future.delayed(const Duration(milliseconds: 80), () {
-              if (mounted && !_itemRightClickClaimed) {
+              if (context.mounted && !_itemRightClickClaimed) {
                 _showAreaMenu(context, event.position, store);
               }
             });
@@ -345,7 +335,7 @@ class _SidebarState extends State<Sidebar> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             sliver: SliverReorderableList(
               itemCount: visual.length,
-              onReorder: (oldV, newV) =>
+              onReorderItem: (oldV, newV) =>
                   _onReorder(store, visual, oldV, newV),
               itemBuilder: (context, vi) {
                 final item = visual[vi];
@@ -409,9 +399,8 @@ class _SidebarState extends State<Sidebar> {
     if (oldItem.conv == null) return; // 节头不可拖
     final oldTop = oldItem.topIndex!;
 
-    var target = newV;
-    if (target > oldV) target -= 1; // ReorderableList 的插入语义
-    target = target.clamp(0, visual.length - 1);
+    // onReorderItem 的 newIndex 已按移除项调整过，直接使用。
+    var target = newV.clamp(0, visual.length - 1);
 
     final newItem = visual[target];
     int newTop;
@@ -469,18 +458,18 @@ class _SidebarState extends State<Sidebar> {
       ],
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (result == 1) {
       // 等 PopupMenu 路由彻底关闭后再修改状态
       await Future<void>.delayed(const Duration(milliseconds: 120));
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       store.activate(null);
     } else if (result == 2) {
       // 不要在 PopupMenu 刚 pop 的同一帧里 showDialog
       await Future<void>.delayed(const Duration(milliseconds: 160));
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       await _newFolderDialog(context, store);
     }
@@ -544,13 +533,13 @@ class _SidebarState extends State<Sidebar> {
         ),
       );
 
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       final folderName = name?.trim();
       if (folderName == null || folderName.isEmpty) return;
 
       await Future<void>.delayed(const Duration(milliseconds: 160));
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       store.addFolder(folderName);
     } finally {
@@ -866,7 +855,7 @@ class _SidebarState extends State<Sidebar> {
       ],
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (result == 1) {
       _renameFolderDialog(context, f);
@@ -932,13 +921,13 @@ class _SidebarState extends State<Sidebar> {
         ),
       );
 
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       final name = newName?.trim();
       if (name == null || name.isEmpty) return;
 
       await Future<void>.delayed(const Duration(milliseconds: 120));
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       store.renameFolder(f.id, name);
     } finally {
@@ -991,11 +980,11 @@ class _SidebarState extends State<Sidebar> {
       ),
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (ok == true) {
       await Future<void>.delayed(const Duration(milliseconds: 120));
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       store.deleteFolder(f.id);
     }
@@ -1047,7 +1036,7 @@ class _SidebarState extends State<Sidebar> {
         ),
       );
 
-      if (!mounted) return;
+      if (!context.mounted) return;
       if (newName != null && newName.trim().isNotEmpty) {
         AppState.chatOf(context).rename(c.id, newName);
       }
@@ -1088,7 +1077,7 @@ class _SidebarState extends State<Sidebar> {
       ),
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
     if (ok == true) {
       AppState.chatOf(context).delete(c.id);
     }
@@ -1283,7 +1272,6 @@ class _ConvRowState extends State<_ConvRow> {
 
 class _FolderHeader extends StatelessWidget {
   const _FolderHeader({
-    super.key,
     required this.folder,
     required this.accent,
     required this.onTap,

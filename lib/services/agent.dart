@@ -1128,7 +1128,7 @@ Add-Type -AssemblyName System.Drawing
         if (rows.length > 100) lines.add('... ${rows.length} rows total');
         return lines.join('\n');
       } finally {
-        db.dispose();
+        db.close();
       }
     } catch (e) {
       return '[SQL error] $e';

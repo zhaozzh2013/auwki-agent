@@ -184,6 +184,7 @@ class _ChatInputState extends State<ChatInput> {
       allowMultiple: false,
     );
     if (picked == null || picked.files.isEmpty) return;
+    if (!mounted) return;
     final pf = picked.files.first;
     final path = pf.path;
     if (path == null) {
@@ -1130,7 +1131,7 @@ class _ChatInputState extends State<ChatInput> {
                 {
                   'type': 'image',
                   'media_type': 'image/png',
-                  'data': screenBase64!,
+                  'data': screenBase64,
                 },
               ]
             : toolPrompt;
@@ -1800,6 +1801,14 @@ class _ChatInputState extends State<ChatInput> {
         error: I18n.t('agent.error.command_cancelled', {'command': call.args}),
       );
     }
+    if (!context.mounted) {
+      return AgentResult(
+        call: call,
+        output: '',
+        error: I18n.t('agent.error.command_cancelled', {'command': call.args}),
+      );
+    }
+    // ignore: use_build_context_synchronously — 上方已有 context.mounted 防护
     return (runtime ?? ToolRuntime(settings: AppState.settingsOf(context)))
         .execute(
           call,

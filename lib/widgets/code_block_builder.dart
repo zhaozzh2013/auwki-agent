@@ -24,14 +24,19 @@ class CopyCodeBlockBuilder extends MarkdownElementBuilder {
       lines.removeLast();
     }
     final code = lines.join('\n').trimRight();
-    final child = super.visitElementAfter(element, preferredStyle);
+    final child = super.visitElementAfterWithContext(
+      context,
+      element,
+      preferredStyle,
+      parentStyle,
+    );
 
     // 注意：不能用 Stack + Positioned —— markdown 块级元素在垂直方向
     // 是无界约束，Positioned 子项会导致 Stack 尺寸计算失败（TransformLayer
     // invalid matrix / 文字堆叠）。Align 是普通子项，布局安全。
     return Stack(
       children: [
-        if (child != null) child,
+        ?child,
         Align(
           alignment: Alignment.topRight,
           child: Padding(

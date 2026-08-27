@@ -6,7 +6,14 @@ import 'package:http/http.dart' as http;
 import '../i18n/strings.dart';
 import 'net_client.dart';
 
-enum ProviderKind { claude, openai, deepseek, MiniMax, custom }
+enum ProviderKind {
+  claude,
+  openai,
+  deepseek,
+  // ignore: constant_identifier_names — kind.name 用于配置持久化，保持原名
+  MiniMax,
+  custom,
+}
 
 enum ApiStyle { anthropic, openai }
 
@@ -381,7 +388,7 @@ class AiClient {
       'model': req.model,
       'messages': [
         if (req.system.isNotEmpty) {'role': 'system', 'content': req.system},
-        ...req.messages.map(_openAiMessage).toList(),
+        ...req.messages.map(_openAiMessage),
       ],
       if (isOSeries)
         'max_completion_tokens': req.maxTokens

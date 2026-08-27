@@ -65,6 +65,7 @@ Future<void> showBranchesDialog(
                           onChanged();
                           name.clear();
                         } catch (e) {
+                          if (!ctx.mounted) return;
                           _snack(ctx, _fmtGitError(e), error: true);
                         }
                       },
@@ -112,6 +113,7 @@ Future<void> showBranchesDialog(
                                     setLocal(() {});
                                     onChanged();
                                   } catch (e) {
+                                    if (!ctx.mounted) return;
                                     _snack(ctx, _fmtGitError(e), error: true);
                                   }
                                 },
@@ -122,8 +124,10 @@ Future<void> showBranchesDialog(
                                 try {
                                   await GitService.switchBranch(b, path: path);
                                   onChanged();
+                                  if (!ctx.mounted) return;
                                   Navigator.pop(ctx);
                                 } catch (e) {
+                                  if (!ctx.mounted) return;
                                   _snack(ctx, _fmtGitError(e), error: true);
                                 }
                               },
@@ -274,6 +278,7 @@ Future<void> _analyzeConflict(
       : '$workspacePath/${file.replaceAll('\\', '/')}';
   final f = File(full);
   if (!await f.exists()) {
+    if (!context.mounted) return;
     _snack(context, I18n.t('git.conflict.read_failed'), error: true);
     return;
   }
@@ -299,6 +304,7 @@ Future<void> _analyzeConflict(
     }
     return buf.toString();
   }();
+  if (!context.mounted) return;
   final result = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -357,6 +363,7 @@ Future<void> _analyzeConflict(
     ),
   );
   if (result == null || result.trim().isEmpty) return;
+  if (!context.mounted) return;
   // 防数据丢失：输出仍含冲突标记或为空时拒绝覆盖原文件。
   if (result.contains('<<<<<<<') ||
       result.contains('>>>>>>>')) {
@@ -569,6 +576,7 @@ Future<void> showFileHistoryDialog(
                                   diff: diff,
                                 );
                               } catch (e) {
+                                if (!context.mounted) return;
                                 _snack(context, _fmtGitError(e), error: true);
                               }
                             },
@@ -665,6 +673,7 @@ Future<void> showGitignoreDialog(
               );
               if (ctx.mounted) Navigator.pop(ctx);
             } catch (e) {
+              if (!ctx.mounted) return;
               _snack(ctx, _fmtGitError(e), error: true);
             }
           },

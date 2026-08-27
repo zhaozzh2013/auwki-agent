@@ -14,11 +14,7 @@ import 'package:auwki_agent/services/chat_database.dart';
 
 import 'helpers.dart';
 
-class _RealHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) =>
-      super.createHttpClient(context);
-}
+class _RealHttpOverrides extends HttpOverrides {}
 
 /// 端到端验证核心聊天链路：
 /// 发送 → 流式输出 → 工具调用解析 → 权限确认 → 工具执行 → 结果回灌 → 最终回答。

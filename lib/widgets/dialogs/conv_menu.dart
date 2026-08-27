@@ -207,7 +207,7 @@ class _MenuRow extends StatelessWidget {
             ),
           ),
         ),
-        if (trailing != null) trailing!,
+        ?trailing,
       ],
     );
   }

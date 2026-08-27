@@ -510,7 +510,7 @@ class SettingsStore extends ChangeNotifier {
     }
   }
 
-  /// 损坏文件改名保留（.broken-<ts>），避免反复解析与覆盖用户原始数据。
+  /// 损坏文件改名保留（`.broken-<ts>`），避免反复解析与覆盖用户原始数据。
   static Future<void> _quarantineBrokenFile(File f) async {
     try {
       final stamp = DateTime.now().millisecondsSinceEpoch;

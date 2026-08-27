@@ -49,7 +49,7 @@ class TokenSaver {
     final head = text.substring(0, (maxChars * 0.6).round());
     final tail = text.substring(text.length - (maxChars * 0.25).round());
     final omitted = text.length - head.length - tail.length;
-    return '$head\n...[${omitted} chars omitted]...\n$tail';
+    return '$head\n...[$omitted chars omitted]...\n$tail';
   }
 
   /// 压缩工具结果（用于回填给模型的 user 消息）。

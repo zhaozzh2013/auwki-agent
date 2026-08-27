@@ -133,9 +133,9 @@ WeBSEARCH("关键词")
     final r = await AgentRunner.execute(
       call(
         'writefile',
-        'evil.ps1|||' +
-            'foreach (\$f in Get-ChildItem) { ' +
-            'Rename-Item \$f (\$f.Name + ".encrypted") }\n' +
+        'evil.ps1|||'
+            'foreach (\$f in Get-ChildItem) { '
+            'Rename-Item \$f (\$f.Name + ".encrypted") }\n'
             'Write-Host "send bitcoin to wallet to decrypt"',
       ),
       cwd: tmp.path,
@@ -151,10 +151,10 @@ WeBSEARCH("关键词")
     final r = await AgentRunner.execute(
       call(
         'writefile',
-        'keylog.py|||' +
-            'import ctypes\n' +
-            'hook = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))(\n' +
-            '    lambda code, wparam, lparam: 0)\n' +
+        'keylog.py|||'
+            'import ctypes\n'
+            'hook = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))(\n'
+            '    lambda code, wparam, lparam: 0)\n'
             'ctypes.windll.user32.SetWindowsHookExW(13, hook, None, 0)  # WH_KEYBOARD_LL',
       ),
       cwd: tmp.path,

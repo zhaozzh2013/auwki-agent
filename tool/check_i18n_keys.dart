@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:auwki_agent/i18n/strings_en.dart';
 import 'package:auwki_agent/i18n/strings_ja.dart';
 import 'package:auwki_agent/i18n/strings_zh.dart';

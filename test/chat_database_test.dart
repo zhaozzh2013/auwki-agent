@@ -119,7 +119,7 @@ void main() {
       'INSERT OR REPLACE INTO conversations (id, data) VALUES (?, ?)',
       ['bad', '{corrupt json'],
     );
-    rawDb.dispose();
+    rawDb.close();
 
     final convs = db.allConversations();
     expect(convs.length, 1);

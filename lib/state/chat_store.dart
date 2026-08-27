@@ -10,7 +10,7 @@ import '../services/chat_database.dart';
 import '../services/workspace_manager.dart';
 
 class ChatStore extends ChangeNotifier {
-  ChatStore({Directory? storageDir}) : _storageDir = storageDir {
+  ChatStore({this._storageDir}) {
     _load();
   }
 

@@ -22,7 +22,7 @@ void main() {
     db.execute('CREATE TABLE t (id INTEGER, name TEXT)');
     db.execute("INSERT INTO t VALUES (1, 'Alice')");
     db.execute("INSERT INTO t VALUES (2, 'Bob')");
-    db.dispose();
+    db.close();
 
     final r = await AgentRunner.execute(
       AgentToolCall(tool: 'sql', args: 'test.db|||SELECT * FROM t'),
@@ -37,7 +37,7 @@ void main() {
     final dbFile = File('${tmp.path}/test.db');
     final db = sqlite3.open(dbFile.path);
     db.execute('CREATE TABLE t (id INTEGER)');
-    db.dispose();
+    db.close();
 
     final r = await AgentRunner.execute(
       AgentToolCall(tool: 'sql', args: 'test.db|||DELETE FROM t'),
