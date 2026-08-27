@@ -84,7 +84,7 @@ void main() {
 
     // 全部字段回默认：preset 默认 general、主题默认 dark
     expect(s.preset, PromptPreset.general);
-    expect(s.theme, AppTheme.dark);
+    expect(s.theme, AppTheme.system); // 默认跟随系统
     // 损坏文件被重命名隔离，settings.json 不再是指向坏数据的文件
     expect(await settingsFile.exists(), isFalse);
     final leftovers = Directory('${dir.path}/support')

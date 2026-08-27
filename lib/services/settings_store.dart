@@ -45,7 +45,7 @@ class SettingsStore extends ChangeNotifier {
   String _apiKey = '';
   String _baseUrl = kProviders.first.baseUrl;
   final List<Map<String, dynamic>> _customProviders = [];
-  AppTheme _theme = AppTheme.dark;
+  AppTheme _theme = AppTheme.system;
   String _userName = I18n.t('sidebar.user');
   String _userInitial = I18n.t('profile.initial.default');
   bool _enterToSend = true;

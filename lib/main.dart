@@ -105,6 +105,7 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
   final RoundChangesStore _roundChanges = RoundChangesStore();
   double _zoom = 1.0;
   int _lastAppliedRetentionDays = -1;
+  late bool _systemDark = _readSystemDark();
 
   @override
   void initState() {
@@ -120,6 +121,20 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     _settings.addListener(_syncZoomFromSettings);
     // E04：第二个实例请求激活时给出提示。
     SingleInstance.activationRequested.addListener(_onActivationRequested);
+    // 主题跟随系统：实时监听系统亮暗切换。
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged =
+        _onPlatformBrightnessChanged;
+  }
+
+  bool _readSystemDark() =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+      Brightness.dark;
+
+  void _onPlatformBrightnessChanged() {
+    final dark = _readSystemDark();
+    if (dark != _systemDark) {
+      setState(() => _systemDark = dark);
+    }
   }
 
   @override
@@ -127,6 +142,8 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
     ScheduledTaskService.instance.stop();
     _settings.removeListener(_maybeApplyRetention);
     SingleInstance.activationRequested.removeListener(_onActivationRequested);
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged =
+        null;
     super.dispose();
   }
 
@@ -220,10 +237,12 @@ class _AuwkiAgentAppState extends State<AuwkiAgentApp> {
       child: AnimatedBuilder(
         animation: Listenable.merge([_store, _settings, I18n.locale]),
         builder: (context, _) {
-          final systemDark =
-              MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-          final isDark = _settings.theme == AppTheme.dark ||
-              (_settings.theme == AppTheme.system && systemDark);
+          // 主题切换：dark/light 强制，system 跟随系统亮度（实时监听）。
+          final isDark = switch (_settings.theme) {
+            AppTheme.dark => true,
+            AppTheme.light => false,
+            AppTheme.system => _systemDark,
+          };
           final basePalette = isDark ? AppPalette.dark : AppPalette.light;
           // bug2：强调色作用于全局调色板；bug5：高对比强化文字/边框。
           var palette = basePalette;
