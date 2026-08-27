@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:auwki_agent/app_state.dart';
 import 'package:auwki_agent/i18n/strings.dart';
 import 'package:auwki_agent/main.dart';
-import 'package:auwki_agent/models/models.dart';
 import 'package:auwki_agent/pages/home_page.dart';
 import 'package:auwki_agent/services/chat_database.dart';
 import 'package:auwki_agent/services/settings_store.dart';

@@ -855,6 +855,13 @@ class _ChatInputState extends State<ChatInput> {
           'thinking': widget.thinking.name,
         };
         if (cancel.isCompleted) break;
+        // 循环轮次提醒：达到 10 轮仍未 final 时提醒模型注意结束。
+        if (turn >= 10 && (turn - 10) % 5 == 0) {
+          currentHistory.add({
+            'role': 'user',
+            'content': I18n.t('chat.loop_warning', {'n': '$turn'}),
+          });
+        }
         final req = ChatRequest(
           system: systemPrompt,
           messages: currentHistory,
@@ -985,14 +992,41 @@ class _ChatInputState extends State<ChatInput> {
           }
           continue;
         }
+        // 模型给出最终输出（[最后输出]...[输出结束]）：
+        // 调用为空列表（isFinal 时强制不解析），即任务完成。
+        if (isFinal) {
+          answered = true;
+          break;
+        }
         // FAST 档位按提示词禁止使用任何工具：即使模型输出了工具块也不执行。
         if (thinking == ThinkingLevel.fast) {
           answered = true;
           break;
         }
         if (calls.isEmpty) {
-          answered = true;
-          break;
+          // 没有 final 也没有工具调用：不允许静默结束——
+          // 注入提示要求模型给出最终输出，继续循环。
+          currentHistory.add({
+            'role': 'assistant',
+            'content': rawAcc.toString(),
+          });
+          currentHistory.add({
+            'role': 'user',
+            'content': I18n.t('chat.force_final_prompt'),
+          });
+          turn++;
+          if (turn < maxTurns + 1) {
+            placeholderId = 'm_${DateTime.now().microsecondsSinceEpoch}_a';
+            store.addMessage(
+              convId,
+              Message(
+                id: placeholderId,
+                sender: Sender.assistant,
+                text: I18n.t('chat.connecting'),
+              ),
+            );
+          }
+          continue;
         }
 
         // 完全相同参数的重复调用只执行一次，避免重复副作用并节省 token。

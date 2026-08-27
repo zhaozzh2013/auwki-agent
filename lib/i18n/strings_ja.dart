@@ -241,6 +241,8 @@ const Map<String, String> kStringsJa = {
       'chat.history_summary': '[履歴要約] {summary}',
       'chat.history_omitted': '[以前のメッセージ省略]',
       'chat.tool_block_retry_prompt': '[ツールブロックの解析に失敗] これが最終回答の場合は、[最后输出] で囲み、[输出结束] で終了してください。ツールが必要な場合は、ツールブロックを再度出力してください: 1 行につき 1 呼び出し、引数は英語の二重引用符で囲み、内部の引用符はバックスラッシュでエスケープし、改行には backslash-n を使用してください。ブロック内に markdown や説明文を入れないでください。',
+      'chat.force_final_prompt': '今ラウンドはツールを呼び出さず、最終出力もありませんでした。すぐに [最后输出] で最終回答を囲み、[输出结束] で終了してタスクを完了してください。',
+      'chat.loop_warning': '注意：タスクは {n} ラウンド繰り返されています。次の回答で [最后输出]...[输出结束] 形式の最終結論を出してループを終了してください。新しいツール呼び出しは行わないでください。',
       'dialog.rename.title': '会話名を変更',
       'dialog.rename.hint': '新しい名前',
       'dialog.delete.title': '会話を削除',

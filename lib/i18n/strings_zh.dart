@@ -261,6 +261,8 @@ const Map<String, String> kStringsZh = {
       'chat.history_omitted': '[较早对话已省略]',
       'chat.tool_block_retry_prompt':
           '[工具块解析失败] 如果这是最终答案，请改用 [最后输出] 包裹并以 [输出结束] 结束；如果需要工具，请重新输出工具调用块：每个工具调用独占一行，参数放在英文双引号中；参数内部的双引号用反斜杠转义，换行用反斜杠 n 表示。不要混入 Markdown 或解释文字。',
+      'chat.force_final_prompt': '你本轮没有调用任何工具，也没有给出最终输出。请立即用 [最后输出] 包裹最终答案、以 [输出结束] 结尾，结束任务。',
+      'chat.loop_warning': '注意：任务已循环 {n} 轮。请在下一次回答中用 [最后输出]...[输出结束] 给出最终结论并结束循环，不要再发起新的工具调用。',
       'dialog.rename.title': '重命名对话',
       'dialog.rename.hint': '输入新名称',
       'dialog.delete.title': '删除对话',

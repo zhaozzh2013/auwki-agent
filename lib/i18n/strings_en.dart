@@ -284,6 +284,8 @@ const Map<String, String> kStringsEn = {
       'chat.history_omitted': '[Earlier messages omitted]',
       'chat.tool_block_retry_prompt':
           '[Tool block parse failed] If this is your final answer, wrap it with [最后输出] and end with [输出结束]. If you need tools, output the tool block again: one call per line, arguments in English double quotes; escape inner quotes with backslashes and use backslash-n for newlines. No markdown or explanatory text inside the block.',
+      'chat.force_final_prompt': 'You called no tools and gave no final output this round. Immediately wrap your final answer in [最后输出] and end it with [输出结束] to finish the task.',
+      'chat.loop_warning': 'Note: the task has been looping for {n} rounds. Wrap your final answer in [最后输出]...[输出结束] in the next reply and stop the loop; do not start new tool calls.',
       'dialog.rename.title': 'Rename conversation',
       'dialog.rename.hint': 'New name',
       'dialog.delete.title': 'Delete conversation',
