@@ -12,6 +12,14 @@ import 'dialogs/additional_workspaces_dialog.dart';
 import 'dialogs/conv_menu.dart';
 import 'dialogs/main_menu.dart';
 
+/// 侧边栏（2026-08-27 重写）。
+///
+/// 设计要点：
+/// - 整个列表包在 `AnimatedBuilder(store)` 里，激活高亮每次 build 都从
+///   `store.activeId` 计算，不做任何本地状态缓存（修复“激活状态不对”）。
+/// - 主区按对话活跃时间分组（今天/昨天/7天/30天/更早），组内与跨组
+///   均可拖拽排序；视觉索引与数据索引通过 [_VisualItem] 统一映射。
+/// - 置顶与文件夹区独立在上方，功能与旧版一致。
 class Sidebar extends StatefulWidget {
   const Sidebar({
     super.key,
@@ -28,6 +36,33 @@ class Sidebar extends StatefulWidget {
 
   @override
   State<Sidebar> createState() => _SidebarState();
+}
+
+/// 主区时间分组。
+enum _ConvGroup { today, yesterday, week, month, older }
+
+extension on _ConvGroup {
+  String get label => switch (this) {
+        _ConvGroup.today => I18n.t('sidebar.section.today'),
+        _ConvGroup.yesterday => I18n.t('sidebar.section.yesterday'),
+        _ConvGroup.week => I18n.t('sidebar.section.7d'),
+        _ConvGroup.month => I18n.t('sidebar.section.30d'),
+        _ConvGroup.older => I18n.t('sidebar.section.older'),
+      };
+}
+
+/// 主区视觉条目：节头或对话行；对话行携带其在 `topLevel` 中的索引。
+class _VisualItem {
+  const _VisualItem.header(this.group)
+      : conv = null,
+        topIndex = null;
+  const _VisualItem.conv(this.conv, this.topIndex) : group = null;
+
+  final _ConvGroup? group;
+  final Conversation? conv;
+  final int? topIndex;
+
+  bool get isHeader => conv == null;
 }
 
 class _SidebarState extends State<Sidebar> {
@@ -61,20 +96,25 @@ class _SidebarState extends State<Sidebar> {
               }
             });
           },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 10),
-              _buildNewChatButton(store),
-              const SizedBox(height: 12),
-              Expanded(child: _buildList(store)),
-            ],
+          child: AnimatedBuilder(
+            animation: store,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeader(context),
+                const SizedBox(height: 10),
+                _buildNewChatButton(store),
+                const SizedBox(height: 12),
+                Expanded(child: _buildList(store)),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  // -------------------------------------------------------------- 头部
 
   Widget _buildHeader(BuildContext context) {
     final settings = AppState.settingsOf(context);
@@ -206,106 +246,191 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
+  // -------------------------------------------------------------- 列表
+
+  static _ConvGroup _groupOf(Conversation c, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(
+      c.updatedAt.year,
+      c.updatedAt.month,
+      c.updatedAt.day,
+    );
+    final diff = today.difference(day).inDays;
+    if (diff <= 0) return _ConvGroup.today;
+    if (diff == 1) return _ConvGroup.yesterday;
+    if (diff <= 7) return _ConvGroup.week;
+    if (diff <= 30) return _ConvGroup.month;
+    return _ConvGroup.older;
+  }
+
   Widget _buildList(ChatStore store) {
     final pinned = store.pinned;
-    final topLevel = store.topLevel;
     final folders = store.folders;
+    final topLevel = store.topLevel;
 
-    final staticSlivers = <Widget>[
-      if (pinned.isNotEmpty) ...[
-        SliverToBoxAdapter(
-          child: _SectionHeader(label: I18n.t('sidebar.section.pinned')),
-        ),
-        for (final c in pinned)
-          SliverToBoxAdapter(
-            child: _ConvRow(
-              key: ValueKey('pin_${c.id}'),
-              keyStr: 'pin_${c.id}',
-              conv: c,
-              accent: _accent,
-              isActive: store.activeId == c.id,
-              onTap: () => store.activate(c.id),
-              onMenu: (offset) => _showConvMenu(context, c, offset),
-              onClaimRightClick: _claimItemRightClick,
-            ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
-      ],
-      for (final f in folders) ...[
-        SliverToBoxAdapter(
-          child: _FolderHeader(
-            folder: f,
-            accent: _accent,
-            onTap: () => store.toggleFolder(f.id),
-            onMenu: (offset) => _showFolderMenu(context, f, offset),
-            onClaimRightClick: _claimItemRightClick,
-          ),
-        ),
-        if (f.expanded)
-          for (final c in store.inFolder(f.id))
-            SliverToBoxAdapter(
-              child: _ConvRow(
-                key: ValueKey('fld_${c.id}'),
-                keyStr: 'fld_${c.id}',
-                conv: c,
-                accent: _accent,
-                isActive: store.activeId == c.id,
-                onTap: () => store.activate(c.id),
-                onMenu: (offset) => _showConvMenu(context, c, offset),
-                onClaimRightClick: _claimItemRightClick,
-                indent: true,
-              ),
-            ),
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
-      ],
-      SliverToBoxAdapter(
-        child: _SectionHeader(label: I18n.t('sidebar.section.7d')),
-      ),
-    ];
+    // 主区：按活跃时间分组，生成视觉条目（节头 + 对话行）。
+    final byGroup = <_ConvGroup, List<Conversation>>{};
+    final topIndexById = <String, int>{};
+    final now = DateTime.now();
+    for (var i = 0; i < topLevel.length; i++) {
+      topIndexById[topLevel[i].id] = i;
+      byGroup.putIfAbsent(_groupOf(topLevel[i], now), () => []).add(topLevel[i]);
+    }
+    final visual = <_VisualItem>[];
+    for (final g in _ConvGroup.values) {
+      final list = byGroup[g];
+      if (list == null || list.isEmpty) continue;
+      visual.add(_VisualItem.header(g));
+      for (final c in list) {
+        visual.add(_VisualItem.conv(c, topIndexById[c.id]));
+      }
+    }
 
     return CustomScrollView(
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-          sliver: SliverMainAxisGroup(slivers: staticSlivers),
+          sliver: SliverMainAxisGroup(slivers: [
+            // ---- 置顶区 ----
+            if (pinned.isNotEmpty) ...[
+              const SliverToBoxAdapter(
+                child: _SectionHeader(labelKey: 'sidebar.section.pinned'),
+              ),
+              for (final c in pinned)
+                SliverToBoxAdapter(
+                  child: _ConvRow(
+                    key: ValueKey('pin_${c.id}'),
+                    conv: c,
+                    accent: _accent,
+                    isActive: store.activeId == c.id,
+                    onTap: () => store.activate(c.id),
+                    onMenu: (offset) => _showConvMenu(context, c, offset),
+                    onClaimRightClick: _claimItemRightClick,
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            ],
+            // ---- 文件夹区 ----
+            for (final f in folders) ...[
+              SliverToBoxAdapter(
+                child: _FolderHeader(
+                  folder: f,
+                  accent: _accent,
+                  onTap: () => store.toggleFolder(f.id),
+                  onMenu: (offset) => _showFolderMenu(context, f, offset),
+                  onClaimRightClick: _claimItemRightClick,
+                ),
+              ),
+              if (f.expanded)
+                for (final c in store.inFolder(f.id))
+                  SliverToBoxAdapter(
+                    child: _ConvRow(
+                      key: ValueKey('fld_${c.id}'),
+                      conv: c,
+                      accent: _accent,
+                      isActive: store.activeId == c.id,
+                      onTap: () => store.activate(c.id),
+                      onMenu: (offset) => _showConvMenu(context, c, offset),
+                      onClaimRightClick: _claimItemRightClick,
+                      indent: true,
+                    ),
+                  ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            ],
+          ]),
         ),
-        if (topLevel.isNotEmpty)
+        // ---- 主区（时间分组 + 拖拽排序）----
+        if (visual.isNotEmpty)
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             sliver: SliverReorderableList(
-              itemBuilder: (context, idx) {
-                final c = topLevel[idx];
+              itemCount: visual.length,
+              onReorder: (oldV, newV) =>
+                  _onReorder(store, visual, oldV, newV),
+              itemBuilder: (context, vi) {
+                final item = visual[vi];
+                if (item.isHeader) {
+                  return _SectionHeader(
+                    key: ValueKey('sec_${item.group!.name}'),
+                    labelKey: _sectionKey(item.group!),
+                  );
+                }
+                final c = item.conv!;
                 return _ConvRow(
                   key: ValueKey('top_${c.id}'),
-                  keyStr: 'top_${c.id}',
                   conv: c,
                   accent: _accent,
                   isActive: store.activeId == c.id,
                   onTap: () => store.activate(c.id),
                   onMenu: (offset) => _showConvMenu(context, c, offset),
                   onClaimRightClick: _claimItemRightClick,
-                  reorderIndex: idx,
+                  reorderIndex: vi,
                 );
               },
-              itemCount: topLevel.length,
-              onReorder: (oldIdx, newIdx) {
-                if (oldIdx < 0 || oldIdx >= topLevel.length) return;
-
-                if (newIdx > oldIdx) {
-                  newIdx -= 1;
-                }
-
-                newIdx = newIdx.clamp(0, topLevel.length - 1);
-
-                if (oldIdx == newIdx) return;
-
-                store.reorderTopLevel(oldIdx, newIdx);
-              },
+            ),
+          ),
+        if (topLevel.isEmpty && pinned.isEmpty && folders.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Center(
+                child: Text(
+                  '还没有对话，点击上方「+ 新建对话」开始',
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             ),
           ),
       ],
     );
   }
+
+  static String _sectionKey(_ConvGroup g) => switch (g) {
+        _ConvGroup.today => 'sidebar.section.today',
+        _ConvGroup.yesterday => 'sidebar.section.yesterday',
+        _ConvGroup.week => 'sidebar.section.7d',
+        _ConvGroup.month => 'sidebar.section.30d',
+        _ConvGroup.older => 'sidebar.section.older',
+      };
+
+  /// 视觉索引 → topLevel 数据索引 → 全局重排。
+  /// 节头不可拖；落到节头上时归入该节第一个对话（插入其前）。
+  void _onReorder(
+    ChatStore store,
+    List<_VisualItem> visual,
+    int oldV,
+    int newV,
+  ) {
+    if (oldV < 0 || oldV >= visual.length) return;
+    final oldItem = visual[oldV];
+    if (oldItem.conv == null) return; // 节头不可拖
+    final oldTop = oldItem.topIndex!;
+
+    var target = newV;
+    if (target > oldV) target -= 1; // ReorderableList 的插入语义
+    target = target.clamp(0, visual.length - 1);
+
+    final newItem = visual[target];
+    int newTop;
+    if (newItem.conv != null) {
+      newTop = newItem.topIndex!;
+    } else {
+      // 目标是节头：落到该节第一个对话前；若该节为空则保持原位。
+      newTop = oldTop;
+      for (final v in visual.skip(target + 1)) {
+        if (v.isHeader) break;
+        newTop = v.topIndex!;
+        break;
+      }
+    }
+    if (oldTop == newTop) return;
+    store.reorderTopLevel(oldTop, newTop);
+  }
+
+  // ------------------------------------------------------------ 菜单/对话框
 
   Future<void> _showAreaMenu(
     BuildContext context,
@@ -329,14 +454,14 @@ class _SidebarState extends State<Sidebar> {
       items: [
         PopupMenuItem(
           value: 1,
-          child: _EmptyAreaRow(
+          child: _MenuRow(
             icon: Icons.add,
             label: I18n.t('sidebar.new_chat'),
           ),
         ),
         PopupMenuItem(
           value: 2,
-          child: _EmptyAreaRow(
+          child: _MenuRow(
             icon: Icons.create_new_folder_outlined,
             label: I18n.t('sidebar.folder.new'),
           ),
@@ -353,7 +478,7 @@ class _SidebarState extends State<Sidebar> {
 
       store.activate(null);
     } else if (result == 2) {
-      // 关键：不要在 PopupMenu 刚 pop 的同一帧里 showDialog
+      // 不要在 PopupMenu 刚 pop 的同一帧里 showDialog
       await Future<void>.delayed(const Duration(milliseconds: 160));
       if (!mounted) return;
 
@@ -424,7 +549,6 @@ class _SidebarState extends State<Sidebar> {
       final folderName = name?.trim();
       if (folderName == null || folderName.isEmpty) return;
 
-      // 关键：Dialog 关闭后，再等一小段时间，保证 route / inherited dependencies 已释放
       await Future<void>.delayed(const Duration(milliseconds: 160));
       if (!mounted) return;
 
@@ -504,7 +628,11 @@ class _SidebarState extends State<Sidebar> {
     if (result == null) return;
     store.setTags(
       c.id,
-      result.split(RegExp(r'[,，]')).map((t) => t.trim()).where((t) => t.isNotEmpty).toList(),
+      result
+          .split(RegExp(r'[,，]'))
+          .map((t) => t.trim())
+          .where((t) => t.isNotEmpty)
+          .toList(),
     );
   }
 
@@ -721,7 +849,7 @@ class _SidebarState extends State<Sidebar> {
       items: [
         PopupMenuItem(
           value: 1,
-          child: _EmptyAreaRow(
+          child: _MenuRow(
             icon: Icons.edit_outlined,
             label: I18n.t('sidebar.menu.rename'),
           ),
@@ -729,7 +857,7 @@ class _SidebarState extends State<Sidebar> {
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 2,
-          child: _EmptyAreaRow(
+          child: _MenuRow(
             icon: Icons.delete_outline,
             label: I18n.t('sidebar.folder.delete'),
             danger: true,
@@ -970,20 +1098,21 @@ class _SidebarState extends State<Sidebar> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label});
+  const _SectionHeader({super.key, required this.labelKey});
 
-  final String label;
+  final String labelKey;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 5),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
       child: Text(
-        label,
+        I18n.t(labelKey),
         style: TextStyle(
           color: AppColors.textTertiary,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -995,7 +1124,6 @@ class _SectionHeader extends StatelessWidget {
 class _ConvRow extends StatefulWidget {
   const _ConvRow({
     super.key,
-    required this.keyStr,
     required this.conv,
     required this.accent,
     required this.isActive,
@@ -1006,12 +1134,11 @@ class _ConvRow extends StatefulWidget {
     this.reorderIndex,
   });
 
-  final String keyStr;
   final Conversation conv;
   final Color accent;
   final bool isActive;
   final VoidCallback onTap;
-  final void Function(Offset) onMenu;
+  final void Function(Offset globalPosition) onMenu;
   final VoidCallback onClaimRightClick;
   final bool indent;
   final int? reorderIndex;
@@ -1112,7 +1239,8 @@ class _ConvRowState extends State<_ConvRow> {
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
-                        final box = context.findRenderObject() as RenderBox?;
+                        final box =
+                            context.findRenderObject() as RenderBox?;
                         if (box != null) {
                           final pos =
                               box.localToGlobal(Offset.zero) +
@@ -1155,6 +1283,7 @@ class _ConvRowState extends State<_ConvRow> {
 
 class _FolderHeader extends StatelessWidget {
   const _FolderHeader({
+    super.key,
     required this.folder,
     required this.accent,
     required this.onTap,
@@ -1165,19 +1294,18 @@ class _FolderHeader extends StatelessWidget {
   final Folder folder;
   final Color accent;
   final VoidCallback onTap;
-  final void Function(Offset) onMenu;
+  final void Function(Offset globalPosition) onMenu;
   final VoidCallback onClaimRightClick;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Listener(
-        onPointerDown: (event) {
-          if (event.buttons == kSecondaryButton) {
-            onClaimRightClick();
-          }
-        },
+    return Listener(
+      onPointerDown: (event) {
+        if (event.buttons == kSecondaryButton) {
+          onClaimRightClick();
+        }
+      },
+      child: MouseRegion(
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
@@ -1188,34 +1316,36 @@ class _FolderHeader extends StatelessWidget {
           child: Container(
             height: 30,
             padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Row(
               children: [
                 Icon(
-                  Icons.folder_outlined,
-                  size: 15,
+                  folder.expanded
+                      ? Icons.arrow_drop_down
+                      : Icons.arrow_right,
+                  size: 18,
                   color: AppColors.textSecondary,
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(width: 3),
                 Expanded(
                   child: Text(
                     folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                AnimatedRotation(
-                  duration: const Duration(milliseconds: 200),
-                  turns: folder.expanded ? 0.5 : 0,
-                  child: Icon(
-                    Icons.expand_more,
-                    size: 16,
-                    color: AppColors.textSecondary,
-                  ),
+                Icon(
+                  Icons.folder_outlined,
+                  size: 14,
+                  color: accent.withValues(alpha: 0.7),
                 ),
               ],
             ),
@@ -1228,8 +1358,8 @@ class _FolderHeader extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _EmptyAreaRow extends StatelessWidget {
-  const _EmptyAreaRow({
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
     required this.icon,
     required this.label,
     this.danger = false,
@@ -1246,7 +1376,10 @@ class _EmptyAreaRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 10),
-        Text(label, style: TextStyle(color: color, fontSize: 13)),
+        Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13),
+        ),
       ],
     );
   }
@@ -1268,42 +1401,43 @@ class _HighlightText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final q = query.trim().toLowerCase();
+    final q = query.trim();
+    if (q.isEmpty) {
+      return Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: style);
+    }
+    final lower = text.toLowerCase();
+    final ql = q.toLowerCase();
     final spans = <TextSpan>[];
-    if (q.isEmpty || text.isEmpty) {
-      spans.add(TextSpan(text: text, style: style));
-    } else {
-      final lower = text.toLowerCase();
-      var start = 0;
-      var idx = lower.indexOf(q);
-      while (idx >= 0) {
-        if (idx > start) {
-          spans.add(TextSpan(text: text.substring(start, idx), style: style));
-        }
-        spans.add(
-          TextSpan(
-            text: text.substring(idx, idx + q.length),
-            style: style.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w700,
-            ),
+    var start = 0;
+    while (true) {
+      final idx = lower.indexOf(ql, start);
+      if (idx < 0) {
+        spans.add(TextSpan(text: text.substring(start)));
+        break;
+      }
+      if (idx > start) {
+        spans.add(TextSpan(text: text.substring(start, idx)));
+      }
+      spans.add(
+        TextSpan(
+          text: text.substring(idx, idx + q.length),
+          style: TextStyle(
+            backgroundColor: AppColors.primary.withValues(alpha: 0.25),
+            fontWeight: FontWeight.w600,
           ),
-        );
-        start = idx + q.length;
-        idx = lower.indexOf(q, start);
-        if (spans.length > 40) break;
-      }
-      if (start < text.length) {
-        spans.add(TextSpan(text: text.substring(start), style: style));
-      }
+        ),
+      );
+      start = idx + q.length;
     }
     return Text.rich(
-      TextSpan(children: spans),
-      maxLines: 1,
+      TextSpan(children: spans, style: style),
+      maxLines: 2,
       overflow: TextOverflow.ellipsis,
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SquareIconButton extends StatelessWidget {
   const _SquareIconButton({
@@ -1318,19 +1452,16 @@ class _SquareIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Material(
-        color: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(9),
-          side: BorderSide(color: AppColors.border),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(9),
-          onTap: onTap,
-          child: Icon(icon, size: 19, color: AppColors.textSecondary),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          child: Icon(icon, size: 17, color: AppColors.textSecondary),
         ),
       ),
     );
