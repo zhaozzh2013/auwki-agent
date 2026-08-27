@@ -3,5 +3,5 @@ class AppInfo {
   AppInfo._();
 
   static const String title = 'AUWKI Agent';
-  static const String version = '2.0.0';
+  static const String version = '10.0.0';
 }
