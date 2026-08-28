@@ -14,14 +14,6 @@
 
 ***AUWKI AGENT**同时支持OpenAI/Anthropic 的 API 格式。
 
-***AUWKI AGENT**同时支持OpenAI/Anthropic 的 API 格式。
-
-### 可选服务商：OrcaRouter（免费模型网关）
-
-在 设置 → 供应商 → 添加自定义供应商 → 「填入模板」即可一键接入
-OrcaRouter（OpenAI 兼容，Base URL: `https://api.orcarouter.ai/v1`），
-注册后可免费使用其平台模型；**这是可选项，不影响任何现有功能，
-你的 API Key 仍只直连你选择的厂商。**
 
 *需要注意的是，**AUWKI AGENT**不适合日常对话使用。
 
