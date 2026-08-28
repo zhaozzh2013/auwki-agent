@@ -278,6 +278,9 @@ const Map<String, String> kStringsJa = {
       'settings.custom_provider.api_style.anthropic': 'Anthropic 互換',
       'settings.custom_provider.models': 'モデル（カンマ区切り）',
       'settings.custom_provider.delete': 'このプロバイダーを削除',
+      'settings.custom_provider.template_or': 'OrcaRouter テンプレートをワンクリック入力（任意の無料モデルゲートウェイ。API Key を入れるだけで使えます）',
+      'settings.custom_provider.use_template': 'テンプレート入力',
+
       'settings.test_connection': '接続テスト',
       'settings.test_connection.running': '接続をテスト中…',
       'settings.test_connection.ok': 'OK: {ms}ms、{models} 件のモデルが見つかりました',

@@ -328,6 +328,9 @@ const Map<String, String> kStringsEn = {
       'settings.custom_provider.api_style.anthropic': 'Anthropic compatible',
       'settings.custom_provider.models': 'Models (comma separated)',
       'settings.custom_provider.delete': 'Remove this provider',
+      'settings.custom_provider.template_or': 'One-click OrcaRouter template (optional free-models gateway; fill in the API key and go)',
+      'settings.custom_provider.use_template': 'Fill template',
+
       'settings.model': 'Model',
       'settings.test_connection': 'Test connection',
       'settings.test_connection.running': 'Testing connection…',

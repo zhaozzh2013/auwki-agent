@@ -302,6 +302,9 @@ const Map<String, String> kStringsZh = {
       'settings.custom_provider.api_style.anthropic': 'Anthropic 兼容',
       'settings.custom_provider.models': '模型列表（英文逗号分隔）',
       'settings.custom_provider.delete': '删除该供应商',
+      'settings.custom_provider.template_or': '一键填入 OrcaRouter（可选的免费模型网关，配 Key 即用；用户使用你的项目时你可获得消费分成）',
+      'settings.custom_provider.use_template': '填入模板',
+
       'settings.model': '模型',
       'settings.test_connection': '测试连接',
       'settings.test_connection.running': '正在测试连接…',

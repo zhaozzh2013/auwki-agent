@@ -180,6 +180,49 @@ class _ProviderSettingsDialogState extends State<ProviderSettingsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // 引流入口：一键填入 OrcaRouter（免费模型网关）模板。
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            I18n.t('settings.custom_provider.template_or'),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setLocal(() {
+                            name.text = 'OrcaRouter';
+                            base.text = 'https://api.orcarouter.ai/v1';
+                            style = ApiStyle.openai;
+                            models.text =
+                                'deepseek-v4-pro, deepseek-v4-flash, qwen3.8-max';
+                          }),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: Text(
+                            I18n.t('settings.custom_provider.use_template'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: name,
                     autofocus: true,
