@@ -14,14 +14,7 @@
 
 ***AUWKI AGENT** also supports both the OpenAI and Anthropic API formats.
 
-***AUWKI AGENT** also supports both the OpenAI and Anthropic API formats.
 
-### Optional provider: OrcaRouter (free-models gateway)
-
-Settings → Provider → Add custom provider → "Fill template" wires up
-OrcaRouter (OpenAI-compatible, Base URL `https://api.orcarouter.ai/v1`) in
-one click. It is **optional**: nothing else changes, and your API keys
-always go directly to the provider you choose.
 
 *Please note that **AUWKI AGENT** is not intended for everyday small-talk use.
 
